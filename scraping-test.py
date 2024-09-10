@@ -3,9 +3,12 @@
 
 # COMMAND ----------
 
-# openai, httpx, beautifulsoup4 をインストール
-%pip install openai httpx beautifulsoup4
-dbutils.library.restartPython()  # databricksのpythonを再起動させる
+# MAGIC %pip install openai httpx beautifulsoup4
+
+# COMMAND ----------
+
+# databricksのpythonを再起動させる
+dbutils.library.restartPython()
 
 # COMMAND ----------
 
