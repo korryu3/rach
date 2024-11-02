@@ -105,6 +105,10 @@ from mlflow import MlflowClient
 
 # COMMAND ----------
 
+[r['catalog'] for r in spark.sql("SHOW CATALOGS").collect()]
+
+# COMMAND ----------
+
 def use_and_create_db(catalog, dbName, cloud_storage_path = None):
   print(f"USE CATALOG `{catalog}`")
   spark.sql(f"USE CATALOG `{catalog}`")
@@ -117,10 +121,14 @@ if len(catalog) > 0:
   if current_catalog != catalog:
     catalogs = [r['catalog'] for r in spark.sql("SHOW CATALOGS").collect()]
     if catalog not in catalogs:
-      spark.sql(f"CREATE CATALOG IF NOT EXISTS {catalog}")
+      # spark.sql(f"CREATE CATALOG IF NOT EXISTS {catalog}")
       if catalog == 'dbdemos':
         spark.sql(f"ALTER CATALOG {catalog} OWNER TO `account users`")
   use_and_create_db(catalog, dbName)
+
+# COMMAND ----------
+
+[r['catalog'] for r in spark.sql("SHOW CATALOGS").collect()]
 
 # COMMAND ----------
 
@@ -270,11 +278,19 @@ print(f"index {vs_index_fullname} on table {source_table_fullname} is ready")
 vs_index = vsc.get_index(
   VECTOR_SEARCH_ENDPOINT_NAME, 
   vs_index_fullname)
+
+try:
+  vs_index.sync()  # なぜかエラー出るが、sync()を2回実行するとエラーが出なくなる
+except:
+  pass
+
+# COMMAND ----------
+
 vs_index.sync()
 
 # COMMAND ----------
 
-# インデックスへの参照を取得
+# インデックスへの参照を取|得
 vs_index = vsc.get_index(VECTOR_SEARCH_ENDPOINT_NAME, vs_index_fullname)
 
 # 英語用のモデルを使っているため、回答が良いものではない
@@ -319,27 +335,26 @@ os.environ["DATABRICKS_TOKEN"] = API_TOKEN
 
 # COMMAND ----------
 
-# %%writefile chain.py
+from operator import itemgetter
+import mlflow
 import os
 
-import pandas as pd
-
-import mlflow
-import mlflow.deployments
-
 from databricks.vector_search.client import VectorSearchClient
-# from langchain_core.prompts.chat import HumanMessagePromptTemplate
+
+from langchain_community.chat_models import ChatDatabricks
+from langchain_community.vectorstores import DatabricksVectorSearch
+
+from langchain_core.runnables import RunnableLambda
+from langchain_core.output_parsers import StrOutputParser
+from langchain_core.runnables import RunnablePassthrough
 from langchain_core.prompts import (
     PromptTemplate,
     ChatPromptTemplate,
 )
-from langchain_core.runnables import RunnableLambda
-from langchain_core.output_parsers import StrOutputParser
-from langchain_community.vectorstores import DatabricksVectorSearch
-from langchain_core.chat_models import ChatDatabricks
-# from openai import OpenAI
 
+## Enable MLflow Tracing
 mlflow.langchain.autolog()
+
 
 ############
 # Helper functions
@@ -354,49 +369,72 @@ def extract_chat_history(chat_messages_array):
     return chat_messages_array[:-1]
 
 
-model_config = mlflow.models.ModelConfig(development_config="rag_chain_config.yaml")
+# FIT AND FINISH: We should not require a value here.
+model_config = mlflow.models.ModelConfig(development_config='rag_chain_config.yaml')
 
-# VectorSearchIndexと接続
+############
+# Connect to the Vector Search Index
+############
 vs_client = VectorSearchClient(disable_notice=True)
 vs_index = vs_client.get_index(
-    endpoint_name=rag_chain_config.get("vector_search_endpoint_name"),
-    index_name=rag_chain_config.get("vector_search_index_name")
+    endpoint_name=model_config.get("vector_search_endpoint_name"),
+    index_name=model_config.get("vector_search_index_name")
 )
 
-
+############
+# Turn the Vector Search index into a LangChain retriever
+############
 vector_search_as_retriever = DatabricksVectorSearch(
-    index=vs_index,
+    vs_index,
     text_column="response",
     columns=[
         "id",
         "query",
-        "response",
-        "url",
+        "reqponse"
+        # "url",
     ],
-).as_retriever(search_kwargs={"k": 5, 'query_type': 'ann'})
+).as_retriever(search_kwargs={"k": 5, "query_type": "ann"})
 
+############
+# Required to:
+# 1. Enable the RAG Studio Review App to properly display retrieved chunks
+# 2. Enable evaluation suite to measure the retriever
+############
 
 mlflow.models.set_retriever_schema(
     primary_key="id",
     text_column="response",
-    doc_uri="url",
+    # doc_uri="url",  # Review App uses `doc_uri` to display chunks from the same document in a single view
 )
 
-# chunk毎のコンテキストを整形する
+
+############
+# Method to format the docs returned by the retriever into the prompt
+############
 def format_context(docs):
-    chunk_template ="Passage: {chunk_text}\n"
+    chunk_template = "Passage: {chunk_text}\n"
     chunk_contents = [
         chunk_template.format(
             chunk_text=d.page_content,
-            document_uri=d.metadata["url"],
+            # document_uri=d.metadata["url"],
         )
         for d in docs
     ]
     return "".join(chunk_contents)
 
+
+# COMMAND ----------
+
+############
+# Prompt Template for generation
+############
 prompt = ChatPromptTemplate.from_messages(
     [
-        ("system", "【参考情報】のみを参考にしながら【質問】にできるだけ正確に答えてください。わからない場合や、質問が適切でない場合は、分からない旨を答えてください。【参考情報】に記載されていない事実を答えるのはやめてください。"),
+        (  # System prompt contains the instructions
+            "system",
+            "【参考情報】のみを参考にしながら【質問】にできるだけ正確に答えてください。わからない場合や、質問が適切でない場合は、分からない旨を答えてください。【参考情報】に記載されていない事実を答えるのはやめてください。",
+        ),
+        # User's question
         ("user", """【参考情報】
 {context}
 
@@ -405,24 +443,35 @@ prompt = ChatPromptTemplate.from_messages(
     ]
 )
 
+
+# COMMAND ----------
+
+############
+# FM for generation
+############
 model = ChatDatabricks(
     endpoint=model_config.get("llm_endpoint_name"),
-    extra_params={"temperature": 0.01, "max_token": 1500},
+    extra_params={"temperature": 0.01, "max_tokens": 1500},
 )
 
-from operator import itemgetter
+############
+# RAG Chain
+############
 chain = (
     {
         "question": itemgetter("messages") | RunnableLambda(extract_user_query_string),
         "context": itemgetter("messages")
         | RunnableLambda(extract_user_query_string)
-        | vector_search_as_retriever,
+        | vector_search_as_retriever
         | RunnableLambda(format_context),
     }
     | prompt
     | model
     | StrOutputParser()
 )
+
+## Tell MLflow logging where to find your chain.
+# `mlflow.models.set_model(model=...)` function specifies the LangChain chain to use for evaluation and deployment.  This is required to log this chain to MLflow with `mlflow.langchain.log_model(...)`.
 
 mlflow.models.set_model(model=chain)
 
@@ -433,3 +482,7 @@ input_example = {
 }
 
 chain.invoke(input_example)
+
+# COMMAND ----------
+
+
