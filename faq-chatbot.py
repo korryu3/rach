@@ -12,6 +12,19 @@
 
 # COMMAND ----------
 
+# MAGIC %pip install ragas nltk datasets typing_extensions
+# MAGIC %pip install python-dotenv langchain_openai 
+# MAGIC #%pip uninstall -y pydantic
+# MAGIC %pip install "pydantic>=2.0,<3.0"
+# MAGIC # `langchain` と `langchain-core` の互換性があるバージョンをインストール
+# MAGIC %pip install "langchain-core>=0.1.16,<0.2"
+# MAGIC %pip install "langchain>=0.1.16,<0.2"
+# MAGIC
+# MAGIC %restart_python
+# MAGIC
+
+# COMMAND ----------
+
 # databricksのpythonを再起動させる
 dbutils.library.restartPython()
 
@@ -115,7 +128,7 @@ if len(catalog) > 0:
     if catalog not in catalogs:
       spark.sql(f"CREATE CATALOG IF NOT EXISTS {catalog}")
       if catalog == 'dbdemos':
-        spark.sql(f"ALTER CATALOG {catalog} OWNER TO `account users`")
+        spark.sql(f"ALTER CATALOG {catalog} OWNER TO `account users'") 
   use_and_create_db(catalog, dbName)
 
 # COMMAND ----------
@@ -129,7 +142,7 @@ sql(f"CREATE VOLUME IF NOT EXISTS {volume};")
 # COMMAND ----------
 
 # すでに同名のテーブルが存在する場合は削除
-sql(f"drop table if exists {raw_data_table_name}")
+#sql(f"drop table if exists {raw_data_table_name}")
 
 
 spark.createDataFrame(qa_list).write.mode('overwrite').saveAsTable(raw_data_table_name)
@@ -205,7 +218,6 @@ def wait_for_index_to_be_ready(vsc, vs_endpoint_name, index_name):
 # COMMAND ----------
 
 from databricks.vector_search.client import VectorSearchClient
-
 # エンドポイントは自分で立ち上げる
 # エンドポイントは毎回立ち上げるもの -> ずっと起動していると、お金がかかっちゃう
 # エンドポイントを落とすと、紐づいているベクトルインデックスが全て削除されちゃう
@@ -468,8 +480,99 @@ mlflow.models.set_model(model=AirbricksRAGAgentApp())
 # COMMAND ----------
 
 input_example = {
-  "messages": [{"role": "user", "content": "授業時間はどのくらいですか？"}]
+  "messages": [{"role": "user", "content": "成績評価方法を教えてください"}]
 }
 
 rag_model = AirbricksRAGAgentApp()
 rag_model.predict(None, model_input=input_example)
+
+# COMMAND ----------
+
+
+from ragas.metrics import (
+    context_precision,
+    answer_relevancy,
+    faithfulness,
+    context_recall,
+    context_entity_recall,
+    answer_similarity,
+    answer_correctness
+)
+
+# list of metrics we're going to use
+metrics = [
+    context_precision,
+    answer_relevancy,
+    faithfulness,
+    context_recall,
+    context_entity_recall,
+    answer_similarity,
+    answer_correctness
+]
+
+# COMMAND ----------
+
+questions = [
+    "授業時間をおしえてください",
+    "授業の終了時間はなんじですか？",
+    "成績評価方法を教えてください",
+]
+# 根拠となった情報(VectorStoreから取得した情報)
+contexts = [
+[
+        qa_list[0]
+        ],
+    [
+        qa_list[1]
+        ],
+    [
+        qa_list[7]
+        ],   
+]
+    
+
+
+# RAGから得られた回答
+answers = [
+    "午前9時からの授業開始です。終了時間は、取得するコースによって異なります。カリキュラムにより変動することもあります。",
+    "授業の終了時間は、取得するコースによって異なります。カリキュラムにより変動するため、具体的な時間をお伝えすることはできません。", 
+    "成績評価方法については、実技評価と試験評価があります。実技評価は、学生が実際に技術を使って行う課題やプロジェクトに対する評価です。試験評価は、学生が学んだ内容を理解しているかを確認するための試験による評価です。これらの評価方法に加え、クラス分けや授業外の課題による評価も行われることがあります。",
+]
+
+# 正しい答え
+ground_truths = [
+    "基本的には午前9時からです。終了時間は、取得するコースによっても異なります。（カリキュラムにより変動します）",
+    "終了時間は、取得するコースによっても異なります。（カリキュラムにより変動します）",
+    "実技評価と試験評価があります。",
+]
+
+# COMMAND ----------
+
+from datasets import Dataset
+
+
+ds = Dataset.from_dict(
+    {
+        "question": questions,
+        "answer": answers,
+        "contexts": contexts,
+        "ground_truth": ground_truths
+    }
+)
+
+# COMMAND ----------
+
+from ragas import evaluate
+
+chat_llm = OpenAI(
+    api_key=os.environ.get("DATABRICKS_TOKEN"),
+    base_url=os.environ.get("DATABRICKS_HOST") + "/serving-endpoints",
+)
+
+# 引数としてデータセット・評価項目・ChatLLM・Embeddingsを与える
+result = evaluate(
+    ds, metrics=metrics, llm=chat_llm, embeddings=embedding_endpoint_name
+)
+
+
+result.to_pandas()
