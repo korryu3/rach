@@ -7,17 +7,25 @@
 
 # COMMAND ----------
 
-# MAGIC %pip install langchain==0.2.11 langchain-core==0.2.23 langchain-community==0.2.10
-
-# COMMAND ----------
-
 # MAGIC %pip install mlflow==2.10.1 lxml==4.9.3 transformers==4.30.2 databricks-vectorsearch==0.22 databricks-sdk==0.28.0 databricks-feature-store==0.17.0
 # MAGIC %pip install dspy-ai -U
 
 # COMMAND ----------
 
+# MAGIC %pip install databricks-agents mlflow mlflow-skinny databricks-vectorsearch
+
+# COMMAND ----------
+
+# MAGIC %pip install langchain==0.2.11 langchain-core==0.2.23 langchain-community==0.2.9
+
+# COMMAND ----------
+
 # databricksのpythonを再起動させる
 dbutils.library.restartPython()
+
+# COMMAND ----------
+
+# MAGIC %pip list
 
 # COMMAND ----------
 
@@ -280,13 +288,16 @@ vs_index = vsc.get_index(
   vs_index_fullname)
 
 try:
-  vs_index.sync()  # なぜかエラー出るが、sync()を2回実行するとエラーが出なくなる
-except:
-  pass
+    vs_index.sync()
+except Exception as e:
+    import time
+    time.sleep(5)
+    vs_index.sync()  # なぜかエラー出るが、sync()を2回実行するとエラーが出なくなる
+
 
 # COMMAND ----------
 
-vs_index.sync()
+
 
 # COMMAND ----------
 
@@ -332,6 +343,10 @@ API_ROOT = dbutils.notebook.entry_point.getDbutils().notebook().getContext().api
 os.environ["DATABRICKS_HOST"] = API_ROOT
 API_TOKEN = dbutils.notebook.entry_point.getDbutils().notebook().getContext().apiToken().get()
 os.environ["DATABRICKS_TOKEN"] = API_TOKEN
+
+# COMMAND ----------
+
+
 
 # COMMAND ----------
 
@@ -390,7 +405,7 @@ vector_search_as_retriever = DatabricksVectorSearch(
     columns=[
         "id",
         "query",
-        "reqponse"
+        "response"
         # "url",
     ],
 ).as_retriever(search_kwargs={"k": 5, "query_type": "ann"})
