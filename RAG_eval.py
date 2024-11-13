@@ -155,7 +155,7 @@ print(f"\n\nReview App: {deployment_info.review_app_url}")
 
 from databricks import agents
 
-user_list = ["ttc2350sa0009@edu.tech.ac.jp"]
+user_list = ["ttc2350sa0009@edu.tech.ac.jp", "21c1080006ks@edu.tech.ac.jp", "21c1080008st@edu.tech.ac.jp", "hiroshi.ouchiyama@databricks.com"]
 agents.set_permissions(model_name=model_name, users=user_list, permission_level=agents.PermissionLevel.CAN_QUERY)
 
 print(f"Share this URL with your stakeholders: {deployment_info.review_app_url}")
