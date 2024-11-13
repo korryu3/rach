@@ -146,8 +146,8 @@ while w.serving_endpoints.get(deployment_info.endpoint_name).state.ready == Endp
     print(".", end="")
     time.sleep(30)
 
-    if time.time() - now > 3600:
-        raise Exception("Endpoint did not deploy in 1 hour")
+    if time.time() - now > 1800:
+        raise Exception("Endpoint did not deploy in 30 minutes")
 
 print(f"\n\nReview App: {deployment_info.review_app_url}")
 
