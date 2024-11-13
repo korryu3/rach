@@ -12,10 +12,6 @@ dbutils.library.restartPython()
 
 # COMMAND ----------
 
-# MAGIC %run ./config
-
-# COMMAND ----------
-
 import time
 def wait_for_vs_endpoint_to_be_ready(vsc, vs_endpoint_name):
   for i in range(180):
@@ -30,6 +26,59 @@ def wait_for_vs_endpoint_to_be_ready(vsc, vs_endpoint_name):
     else:
       raise Exception(f'''Error with the endpoint {vs_endpoint_name}. - this shouldn't happen: {endpoint}.\n Please delete it and re-run the previous cell: vsc.delete_endpoint("{vs_endpoint_name}")''')
   raise Exception(f"Timeout, your endpoint isn't ready yet: {vsc.get_endpoint(vs_endpoint_name)}")
+
+# COMMAND ----------
+
+def index_exists(vsc, endpoint_name, index_full_name):
+  try:
+    dict_vsindex = vsc.get_index(endpoint_name, index_full_name).describe()
+  except Exception as e:
+    if 'RESOURCE_DOES_NOT_EXIST' not in str(e):
+      print(f'Unexpected error describing the index. This could be a permission issue.')
+      raise e
+  return dict_vsindex.get('status').get('ready', False)
+
+def wait_for_index_to_be_ready(vsc, vs_endpoint_name, index_name):
+  for i in range(180):
+    idx = vsc.get_index(vs_endpoint_name, index_name).describe()
+    index_status = idx.get('status', idx.get('index_status', {}))
+    status = index_status.get('detailed_state', index_status.get('status', 'UNKNOWN')).upper()
+    url = index_status.get('index_url', index_status.get('url', 'UNKNOWN'))
+    if "ONLINE" in status:
+      return
+    if "UNKNOWN" in status:
+      print(f"Can't get the status - will assume index is ready {idx} - url: {url}")
+      return
+    elif "PROVISIONING" in status:
+      if i % 40 == 0: print(f"Waiting for index to be ready, this can take a few min... {index_status} - pipeline url:{url}")
+      time.sleep(10)
+    else:
+        raise Exception(f'''Error with the index - this shouldn't happen. DLT pipeline might have been killed.\n Please delete it and re-run the previous cell: vsc.delete_index("{index_name}, {vs_endpoint_name}") \nIndex details: {idx}''')
+  raise Exception(f"Timeout, your index isn't ready yet: {vsc.get_index(index_name, vs_endpoint_name)}")
+
+# COMMAND ----------
+
+def create_index(vsc, vector_search_index_name, source_table_name):
+  # embeddingモデル名
+  embedding_endpoint_name = "databricks-gte-large-en"
+
+  #インデックスを新規作成
+  print(f"Creating index {vector_search_index_name} on endpoint {VECTOR_SEARCH_ENDPOINT_NAME}...")
+  vsc.create_delta_sync_index(
+  endpoint_name=VECTOR_SEARCH_ENDPOINT_NAME,
+  index_name=vector_search_index_name,
+  pipeline_type="TRIGGERED",
+  source_table_name=source_table_name,
+  primary_key="id",
+  embedding_source_column="response",
+  embedding_model_endpoint_name=embedding_endpoint_name
+  )
+
+  #インデックスの準備ができ、すべてエンベッディングが作成され、インデックスが作成されるのを待ちましょう。
+  wait_for_index_to_be_ready(vsc, VECTOR_SEARCH_ENDPOINT_NAME, vector_search_index_name)
+  print(f"index {vector_search_index_name} on table {source_table_name} is ready")
+
+
 
 # COMMAND ----------
 
@@ -75,10 +124,15 @@ model_config = mlflow.models.ModelConfig(development_config='rag_chain_config.ya
 ############
 vs_client = VectorSearchClient(disable_notice=True)
 
+VECTOR_SEARCH_ENDPOINT_NAME = model_config.get("vector_search_endpoint_name")
+
 if VECTOR_SEARCH_ENDPOINT_NAME not in [e['name'] for e in vs_client.list_endpoints().get('endpoints', [])]:
     vs_client.create_endpoint(name=VECTOR_SEARCH_ENDPOINT_NAME, endpoint_type="STANDARD")
 
 wait_for_vs_endpoint_to_be_ready(vs_client, VECTOR_SEARCH_ENDPOINT_NAME)
+
+if not index_exists(vs_client, VECTOR_SEARCH_ENDPOINT_NAME, model_config.get("vector_search_index_name")):
+    create_index(vs_client, model_config.get("vector_search_index_name"), model_config.get("source_table_name"))
 
 vs_index = vs_client.get_index(
     endpoint_name=model_config.get("vector_search_endpoint_name"),
