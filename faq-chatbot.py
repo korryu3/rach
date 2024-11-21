@@ -12,14 +12,6 @@
 
 # COMMAND ----------
 
-
-
-# COMMAND ----------
-
-
-
-# COMMAND ----------
-
 # databricksのpythonを再起動させる
 dbutils.library.restartPython()
 
@@ -325,7 +317,6 @@ import mlflow
 
 rag_chain_config = {
       "vector_search_endpoint_name": VECTOR_SEARCH_ENDPOINT_NAME,
-      "source_table_name": f"{catalog}.{dbName}.{embed_table_name}",
       "vector_search_index_name": f"{catalog}.{dbName}.{embed_table_name}_vs_index",
       "llm_endpoint_name": instruct_endpoint_name,
 }
