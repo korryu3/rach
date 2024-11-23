@@ -78,12 +78,11 @@ exsample_eval_set  = [
     },
 ]
 
-
-
 #### Convert dictionary to a pandas DataFrame
 csv_path = "eval-dataset.csv"
 eval_set_df = pd.read_csv(csv_path)
 
+eval_set_df["request_id"] = eval_set_df["request_id"].astype(str)  # 文字列じゃないとエラー出る
 
 model_name = f"{catalog}.{dbName}.{registered_model_name}"
 
