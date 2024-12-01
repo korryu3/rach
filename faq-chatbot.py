@@ -129,7 +129,8 @@ for url in event_urls:
 # COMMAND ----------
 
 # 取得したHPのurl一覧
-urls_ls
+for url in urls_ls:
+    print(url)
 
 # COMMAND ----------
 
@@ -234,6 +235,8 @@ url_html_pairs[0]
 
 # COMMAND ----------
 
+# 参考
+# https://qiita.com/taka_yayoi/items/f174599e4721e51e9e1d
 from langchain.text_splitter import HTMLHeaderTextSplitter, RecursiveCharacterTextSplitter
 from transformers import AutoTokenizer, OpenAIGPTTokenizer
 
