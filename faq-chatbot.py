@@ -24,6 +24,7 @@ dbutils.library.restartPython()
 import os
 import openai
 import httpx
+from bs4.element import Tag
 from bs4 import BeautifulSoup
 import pandas as pd
 import numpy as np
@@ -32,62 +33,237 @@ import re
 
 # COMMAND ----------
 
-load_url = "https://www.tech.ac.jp/sitemap/"
-html = httpx.get(load_url)
-soup = BeautifulSoup(html.content, "html.parser")
+# 情報収集に使えそうなリンク集
+# https://www.tech.ac.jp/sitemap/
+# https://www.tech.ac.jp/work_books/
+# https://www.tech.ac.jp/blog/
+
+# https://content.tech.ac.jp/campuslife/
+
+# PDFいっぱいあるページ
+# https://www.tech.ac.jp/info/
 
 # COMMAND ----------
 
-links = soup.find_all('a')
-links_set = set()
-for link in links:
-    url = link.get('href')
-    if "http" not in url and url.startswith("/"):
-        url = "https://www.tech.ac.jp" + url  # urlが相対パスになっているため、www.~~を追加
-        links_set.add(url)
-
-urls_ls = list(links_set)
+def get_soup(url):
+    html = httpx.get(url)
+    # 200か300番台はOK
+    if html.status_code < 200 or html.status_code >= 400:
+        raise Exception(f"Failed to get {url}, status code: {html.status_code}")
+    return BeautifulSoup(html.content, "html.parser")
 
 # COMMAND ----------
 
-# sitemapから取ってきた、HPのurl一覧
+sitemap_url = "https://www.tech.ac.jp/sitemap/"
+sitemap_soup = get_soup(sitemap_url)
+work_books_url = "https://www.tech.ac.jp/work_books/"
+work_books_soup = get_soup(work_books_url)
+blog_url = "https://www.tech.ac.jp/blog/"
+blog_soup = get_soup(blog_url)
+
+# COMMAND ----------
+
+def extract_links(soup) -> set:
+    links = soup.find_all('a')
+    links_set = set()
+    for link in links:
+        url = link.get('href')
+        if "http" not in url and url.startswith("/"):
+            url = "https://www.tech.ac.jp" + url  # urlが相対パスになっているため、www.~~を追加
+            links_set.add(url)
+
+    return links_set
+
+# COMMAND ----------
+
+sitemap_urls = extract_links(sitemap_soup)
+work_books_urls = extract_links(work_books_soup)
+blog_urls = extract_links(blog_soup)
+
+urls_ls = list(sitemap_urls | work_books_urls | blog_urls)
+
+# COMMAND ----------
+
+# pdfはいったん退避
+for url in urls_ls:
+  if url.endswith('pdf'):
+    print(url)
+    urls_ls.remove(url)
+
+
+# COMMAND ----------
+
+# リンク集は省く
+urls_ls.remove(sitemap_url)
+urls_ls.remove(work_books_url)
+urls_ls.remove(blog_url)
+
+# 学生作品紹介ページ
+student_works_url = 'https://www.tech.ac.jp/gallery/'
+urls_ls.remove(student_works_url)
+
+# 韓国語、英語、中国語の紹介ページ
+lang_urls = [
+  'https://www.tech.ac.jp/visitor/language/ko/',
+  'https://www.tech.ac.jp/visitor/language/en/',
+  'https://www.tech.ac.jp/visitor/language/ch/'
+]
+for url in lang_urls:
+  urls_ls.remove(url)
+
+# 変動するページは一旦やらないようにする
+event_urls = [
+  'https://www.tech.ac.jp/opencampus/',
+  'https://www.tech.ac.jp/opencampus/program/special-event/',
+  'https://www.tech.ac.jp/opencampus/program/experience-lesson/',
+  'https://www.tech.ac.jp/opencampus/program/exam/',
+  'https://www.tech.ac.jp/opencampus/program/school-briefing/',
+]
+for url in event_urls:
+  urls_ls.remove(url)
+
+
+# COMMAND ----------
+
+# 取得したHPのurl一覧
 urls_ls
 
 # COMMAND ----------
 
-q_and_a = "https://www.tech.ac.jp/school/faq/"
-
-html = httpx.get(q_and_a)
-soup = BeautifulSoup(html.content, "html.parser")
+len(urls_ls)
 
 # COMMAND ----------
 
-qa_list = []
-qa_selector = soup.select("#page > main > article > #faq01,#faq02,#faq03")
+from typing import Optional
 
-for faq_container in qa_selector:
-    faq_item = faq_container.select("div > div > div > ul > li")
-    
-    for faq in faq_item:
-        q = faq.select(".-q > p")[0].text
-        a = faq.select(".-a > p")[0].text
-        print(q)
-        print(a)
-        print("-"*40)
+def extract_page_different(soup) -> Tag:
+  # main tagがない
+  article_html = soup.select("#page > .l-contents > .l-main > article")[0]
+  course_info = article_html.select(".p-different_course")
+  opencampus_info = article_html.select(".p-different_opencampus")
+  article_html.select(".p-different_course")[0].decompose()
+  article_html.select(".p-different_opencampus")[0].decompose()
+  return article_html
 
-        qa_list.append({
-            "query": q,
-            "response": a
-        })
+def extract_page_strengths(soup) -> Tag:
+  # main tagがない
+  return soup.select("#page > .l-contents > .l-main > article")[0]
+
+def extract_page_myschool(soup) -> str:
+  # article tagがない
+  opencampus_leading = soup.select("#page > main > .p-opencampus_leading")[0]
+  myschool_point = soup.select("#page > main > .p-myschool_point")[0]
+  return str(opencampus_leading) + str(myschool_point)
+
+def extract_page_webopencampus(soup) -> str:  
+  # article tagがない
+  opencampus_leading = soup.select("#page > main > .p-opencampus_leading")[0]
+  unique_info = soup.select("#page > main > .c-common_section")[0]
+  web_opencampus_step = soup.select("#page > main > .c-common_section")[0]
+  return str(opencampus_leading) + str(web_opencampus_step)
+
+def remove_tag(article_html, selector):
+  if len(article_html.select(selector)) > 0:
+    article_html.select(selector)[0].decompose()
+
+def extract_article_html(url) -> Optional[str]:
+  soup = get_soup(url)
+  try:
+    article_html = soup.select("#page > main > article")[0]
+    # リンク集
+    remove_tag(article_html, ".c-lower_links")
+    # OpenCampus情報
+    remove_tag(article_html, ".p-course_opencampus")
+    remove_tag(article_html, "#opencampus")
+    # 専攻一覧
+    remove_tag(article_html, ".p-course_major")
+    # 専攻リンク
+    remove_tag(article_html, ".p-world_links")
+    # 資料請求とopemcampus
+    remove_tag(article_html, ".c-cta01_sm")
+    # workbook内のopemcampus情報
+    remove_tag(article_html, ".p-work_books_article__body > .p-work_books__opencampus")
+    # パンフレット
+    remove_tag(article_html, ".c-admission_cta")
+
+  except:
+    # 個別処理
+    if url == 'https://www.tech.ac.jp/features/different/':
+      article_html = extract_page_different(soup)
+    elif url == url == 'https://www.tech.ac.jp/features/strengths/':
+      article_html = extract_page_strengths(soup)
+    elif url == 'https://www.tech.ac.jp/myschool/':
+      article_html = extract_page_myschool(soup)
+    elif url == 'https://www.tech.ac.jp/web_opencampus/':
+      article_html = extract_page_webopencampus(soup)
+    else:
+      print('error in url:', url)
+      return None
+
+  return str(article_html)
 
 # COMMAND ----------
 
+url_html_pairs = []
 
-len(qa_list)
+import time
+from tqdm import tqdm
+print('Processing...')
+for url in tqdm(urls_ls, desc='Extracting HTML'):
+  article_html = extract_article_html(url)
+  if article_html is not None:
+    url_html_pairs.append({
+      'url': url,
+      'content': article_html,
+    })
+  time.sleep(0.5)
+print('All done!')
 
 # COMMAND ----------
 
-qa_list
+url_html_pairs[0]
+
+# COMMAND ----------
+
+from langchain.text_splitter import HTMLHeaderTextSplitter, RecursiveCharacterTextSplitter
+from transformers import AutoTokenizer, OpenAIGPTTokenizer
+
+max_chunk_size = 500
+
+tokenizer = OpenAIGPTTokenizer.from_pretrained("openai-gpt")
+text_splitter = RecursiveCharacterTextSplitter.from_huggingface_tokenizer(tokenizer, chunk_size=max_chunk_size, chunk_overlap=50)
+html_splitter = HTMLHeaderTextSplitter(headers_to_split_on=[("h2", "header2")])
+
+# Split on H2で分割しますが、あまり小さすぎないように小さなh2チャンクはマージします
+def split_html_on_h2(html, min_chunk_size = 20, max_chunk_size=500):
+  if not html:
+      return []
+  h2_chunks = html_splitter.split_text(html)
+  chunks = []
+  previous_chunk = ""
+  # チャンクを結合し、h2の前にテキストを追加することでチャンクを結合し、小さすぎる文書を回避します
+  for c in h2_chunks:
+    # h2の結合 (注意: 重複したh2を回避するために以前のチャンクを削除することもできます)
+    content = c.metadata.get('header2', "") + "\n" + c.page_content
+    if len(tokenizer.encode(previous_chunk + content)) <= max_chunk_size/2:
+        previous_chunk += content + "\n"
+    else:
+        chunks.extend(text_splitter.split_text(previous_chunk.strip()))
+        previous_chunk = content + "\n"
+  if previous_chunk:
+      chunks.extend(text_splitter.split_text(previous_chunk.strip()))
+  # 小さすぎるチャンクの破棄
+  return [c for c in chunks if len(tokenizer.encode(c)) > min_chunk_size]
+ 
+
+# COMMAND ----------
+
+html = url_html_pairs[0]['content']
+split_html = split_html_on_h2(html)
+
+# COMMAND ----------
+
+split_html
 
 # COMMAND ----------
 
@@ -105,7 +281,11 @@ from mlflow import MlflowClient
 
 # COMMAND ----------
 
-[r['catalog'] for r in spark.sql("SHOW CATALOGS").collect()]
+# sparkですべてのドキュメントのチャンクを作成するためのユーザー定義関数(UDF)を作成
+@pandas_udf("array<string>")
+def parse_and_split(docs: pd.Series) -> pd.Series:
+    return docs.apply(split_html_on_h2)
+    
 
 # COMMAND ----------
 
@@ -144,9 +324,19 @@ sql(f"CREATE VOLUME IF NOT EXISTS {volume};")
 sql(f"drop table if exists {raw_data_table_name}")
 
 
-spark.createDataFrame(qa_list).write.mode('overwrite').saveAsTable(raw_data_table_name)
+spark.createDataFrame(url_html_pairs).write.mode('overwrite').saveAsTable(raw_data_table_name)
 
 display(spark.table(raw_data_table_name))
+
+# COMMAND ----------
+
+# すべてのドキュメントチャンクを保存する
+# (spark.table("raw_documentation")
+#       .filter('text is not null')
+#       .withColumn('content', F.explode(parse_and_split('text')))
+#       .drop("text")
+#       .write.mode('overwrite').saveAsTable("databricks_documentation"))
+
 
 # COMMAND ----------
 
@@ -156,8 +346,8 @@ sql(f"""
 --インデックスを作成するには、テーブルのChange Data Feedを有効にします
 CREATE TABLE IF NOT EXISTS {embed_table_name} (
   id BIGINT GENERATED BY DEFAULT AS IDENTITY,
-  query STRING,
-  response STRING
+  url STRING,
+  content STRING
 ) TBLPROPERTIES (delta.enableChangeDataFeed = true); 
 """)
 
