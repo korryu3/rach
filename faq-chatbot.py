@@ -38,6 +38,7 @@ import re
 # https://www.tech.ac.jp/work_books/
 # https://www.tech.ac.jp/blog/
 
+# まだ使えていないページ
 # https://content.tech.ac.jp/campuslife/
 
 # PDFいっぱいあるページ
