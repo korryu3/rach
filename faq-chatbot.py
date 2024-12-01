@@ -7,7 +7,7 @@
 
 # COMMAND ----------
 
-# MAGIC %pip install mlflow==2.10.1 lxml==4.9.3 transformers==4.30.2 databricks-vectorsearch==0.22 databricks-sdk==0.28.0 databricks-feature-store==0.17.0
+# MAGIC %pip install mlflow==2.10.1 lxml==4.9.3 transformers==4.30.2 databricks-vectorsearch==0.22 databricks-sdk==0.28.0 databricks-feature-store==0.17.0 langchain==0.2.11 langchain_core==0.2.23
 # MAGIC %pip install dspy-ai -U
 
 # COMMAND ----------
@@ -214,7 +214,7 @@ for url in tqdm(urls_ls, desc='Extracting HTML'):
   if article_html is not None:
     url_html_pairs.append({
       'url': url,
-      'content': article_html,
+      'text': article_html,
     })
   time.sleep(0.5)
 print('All done!')
@@ -228,14 +228,14 @@ url_html_pairs[0]
 from langchain.text_splitter import HTMLHeaderTextSplitter, RecursiveCharacterTextSplitter
 from transformers import AutoTokenizer, OpenAIGPTTokenizer
 
-max_chunk_size = 500
+max_chunk_size = 512
 
 tokenizer = OpenAIGPTTokenizer.from_pretrained("openai-gpt")
 text_splitter = RecursiveCharacterTextSplitter.from_huggingface_tokenizer(tokenizer, chunk_size=max_chunk_size, chunk_overlap=50)
 html_splitter = HTMLHeaderTextSplitter(headers_to_split_on=[("h2", "header2")])
 
 # Split on H2で分割しますが、あまり小さすぎないように小さなh2チャンクはマージします
-def split_html_on_h2(html, min_chunk_size = 20, max_chunk_size=500):
+def split_html_on_h2(html, min_chunk_size = 20, max_chunk_size=512):
   if not html:
       return []
   h2_chunks = html_splitter.split_text(html)
@@ -321,22 +321,26 @@ sql(f"CREATE VOLUME IF NOT EXISTS {volume};")
 # COMMAND ----------
 
 # すでに同名のテーブルが存在する場合は削除
-sql(f"drop table if exists {raw_data_table_name}")
+tmp_raw_data_table_name = f'tmp_{raw_data_table_name}
+sql(f"drop table if exists {tmp_raw_data_table_name}")
 
 
-spark.createDataFrame(url_html_pairs).write.mode('overwrite').saveAsTable(raw_data_table_name)
+spark.createDataFrame(url_html_pairs).write.mode('overwrite').saveAsTable(tmp_raw_data_table_name)
 
-display(spark.table(raw_data_table_name))
+display(spark.table(tmp_raw_data_table_name))
 
 # COMMAND ----------
 
 # すべてのドキュメントチャンクを保存する
-# (spark.table("raw_documentation")
-#       .filter('text is not null')
-#       .withColumn('content', F.explode(parse_and_split('text')))
-#       .drop("text")
-#       .write.mode('overwrite').saveAsTable("databricks_documentation"))
+(spark.table(tmp_raw_data_table_name)
+      .filter('text is not null')
+      .withColumn('content', F.explode(parse_and_split('text')))
+      .drop("text")
+      .write.mode('overwrite').saveAsTable(raw_data_table_name))
 
+sql(f"drop table if exists {tmp_raw_data_table_name}")
+
+display(spark.table(raw_data_table_name))
 
 # COMMAND ----------
 
@@ -454,7 +458,7 @@ vsc.create_delta_sync_index(
   pipeline_type="TRIGGERED",
   source_table_name=source_table_fullname,
   primary_key="id",
-  embedding_source_column="response",
+  embedding_source_column="content",
   embedding_model_endpoint_name=embedding_endpoint_name
 )
 
@@ -479,10 +483,6 @@ except Exception as e:
 
 # COMMAND ----------
 
-
-
-# COMMAND ----------
-
 # インデックスへの参照を取|得
 vs_index = vsc.get_index(VECTOR_SEARCH_ENDPOINT_NAME, vs_index_fullname)
 
@@ -492,7 +492,7 @@ vs_index = vsc.get_index(VECTOR_SEARCH_ENDPOINT_NAME, vs_index_fullname)
 
 results = vs_index.similarity_search(
   query_text="授業時間はどのくらいですか？",
-  columns=["query", "response"],
+  columns=["url", "content"],
   num_results=10  # 上位三つの結果を返す
 )
 docs = results.get('result', {}).get('data_array', [])
