@@ -112,6 +112,8 @@ for url in lang_urls:
   urls_ls.remove(url)
 
 # 変動するページは一旦やらないようにする
+# 理由は、RAGが回答する時期にこのオープンキャンパスがやっているとは限らないから
+# もしやるとしたら、イベント用のテーブルを別で作って、月一で更新かけるとかが有効かも
 event_urls = [
   'https://www.tech.ac.jp/opencampus/',
   'https://www.tech.ac.jp/opencampus/program/special-event/',
