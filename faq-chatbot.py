@@ -216,8 +216,14 @@ for url in tqdm(urls_ls, desc='Extracting HTML'):
       'url': url,
       'text': article_html,
     })
+  else:
+    print('error in url:', url)
   time.sleep(0.5)
 print('All done!')
+
+# COMMAND ----------
+
+len(url_html_pairs)
 
 # COMMAND ----------
 
@@ -258,7 +264,7 @@ def split_html_on_h2(html, min_chunk_size = 20, max_chunk_size=512):
 
 # COMMAND ----------
 
-html = url_html_pairs[0]['content']
+html = url_html_pairs[0]['text']
 split_html = split_html_on_h2(html)
 
 # COMMAND ----------
@@ -321,7 +327,7 @@ sql(f"CREATE VOLUME IF NOT EXISTS {volume};")
 # COMMAND ----------
 
 # すでに同名のテーブルが存在する場合は削除
-tmp_raw_data_table_name = f'tmp_{raw_data_table_name}
+tmp_raw_data_table_name = f'tmp_{raw_data_table_name}'
 sql(f"drop table if exists {tmp_raw_data_table_name}")
 
 
@@ -477,7 +483,7 @@ try:
     vs_index.sync()
 except Exception as e:
     import time
-    time.sleep(5)
+    time.sleep(10)
     vs_index.sync()  # なぜかエラー出るが、sync()を2回実行するとエラーが出なくなる
 
 
@@ -491,7 +497,7 @@ vs_index = vsc.get_index(VECTOR_SEARCH_ENDPOINT_NAME, vs_index_fullname)
   # お家GPUで学習が可能 -> databricksにアップロードする
 
 results = vs_index.similarity_search(
-  query_text="授業時間はどのくらいですか？",
+  query_text="授業時間は一コマどのくらいですか？",
   columns=["url", "content"],
   num_results=10  # 上位三つの結果を返す
 )

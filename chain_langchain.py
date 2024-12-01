@@ -64,14 +64,13 @@ vs_index = vs_client.get_index(
 ############
 vector_search_as_retriever = DatabricksVectorSearch(
     vs_index,
-    text_column="response",
+    text_column="content",
     columns=[
         "id",
-        "query",
-        "response"
-        # "url",
+        "content",
+        "url",
     ],
-).as_retriever(search_kwargs={"k": 5, "query_type": "ann"})
+).as_retriever(search_kwargs={"k": 10, "query_type": "ann"})
 
 ############
 # Required to:
@@ -81,8 +80,8 @@ vector_search_as_retriever = DatabricksVectorSearch(
 
 mlflow.models.set_retriever_schema(
     primary_key="id",
-    text_column="response",
-    # doc_uri="url",  # Review App uses `doc_uri` to display chunks from the same document in a single view
+    text_column="content",
+    doc_uri="url",  # Review App uses `doc_uri` to display chunks from the same document in a single view
 )
 
 
@@ -94,7 +93,7 @@ def format_context(docs):
     chunk_contents = [
         chunk_template.format(
             chunk_text=d.page_content,
-            # document_uri=d.metadata["url"],
+            document_uri=d.metadata["url"],
         )
         for d in docs
     ]
@@ -137,7 +136,9 @@ model = ChatDatabricks(
 ############
 chain = (
     {
+        # userの質問
         "question": itemgetter("messages") | RunnableLambda(extract_user_query_string),
+        # 参考情報
         "context": itemgetter("messages")
         | RunnableLambda(extract_user_query_string)
         | vector_search_as_retriever
@@ -155,11 +156,11 @@ mlflow.models.set_model(model=chain)
 
 # COMMAND ----------
 
-# input_example = {
-#   "messages": [{"role": "user", "content": "授業時間は一コマどのくらいですか？"}]
-# }
+input_example = {
+  "messages": [{"role": "user", "content": "授業時間は一コマどのくらいですか？"}]
+}
 
-# chain.invoke(input_example)
+chain.invoke(input_example)
 
 # COMMAND ----------
 
