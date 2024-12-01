@@ -156,11 +156,11 @@ mlflow.models.set_model(model=chain)
 
 # COMMAND ----------
 
-input_example = {
-  "messages": [{"role": "user", "content": "授業時間は一コマどのくらいですか？"}]
-}
+# input_example = {
+#   "messages": [{"role": "user", "content": "授業時間は一コマどのくらいですか？"}]
+# }
 
-chain.invoke(input_example)
+# chain.invoke(input_example)
 
 # COMMAND ----------
 
