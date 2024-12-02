@@ -460,7 +460,8 @@ if index_exists(vsc, VECTOR_SEARCH_ENDPOINT_NAME, vs_index_fullname):
       break
 
 # embeddingモデル名
-embedding_endpoint_name = "databricks-gte-large-en"
+# embedding_endpoint_name = "databricks-gte-large-en"
+embedding_endpoint_name = "multilingual-e5-large-embedding"
 
 #インデックスを新規作成
 print(f"Creating index {vs_index_fullname} on endpoint {VECTOR_SEARCH_ENDPOINT_NAME}...")
