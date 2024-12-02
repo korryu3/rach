@@ -32,6 +32,15 @@ from langchain_core.prompts import (
 ## Enable MLflow Tracing
 mlflow.langchain.autolog()
 
+# scoreを返したいので、独自に実装する
+# .as_retrieverでやると、similarity_search が内部で呼ばれるため、scoreが返ってくる similarity_search_with_scoreを呼ぶようにしている
+class CustomDatabricksVectorSearch(DatabricksVectorSearch):
+    def similarity_search(self, query, k=10, **kwargs):
+        docs_and_scores = self.similarity_search_with_score(query, k=k, **kwargs)
+        for doc, score in docs_and_scores:
+            doc.metadata['score'] = score
+        return [doc for doc, _ in docs_and_scores]
+
 
 ############
 # Helper functions
@@ -62,7 +71,7 @@ vs_index = vs_client.get_index(
 ############
 # Turn the Vector Search index into a LangChain retriever
 ############
-vector_search_as_retriever = DatabricksVectorSearch(
+vector_search_as_retriever = CustomDatabricksVectorSearch(
     vs_index,
     text_column="content",
     columns=[
@@ -70,7 +79,14 @@ vector_search_as_retriever = DatabricksVectorSearch(
         "content",
         "url",
     ],
-).as_retriever(search_kwargs={"k": 10, "query_type": "ann"})
+).as_retriever(search_kwargs={
+    "k": 10,
+    "query_type": "ann",
+})
+# .as_retriever(
+#     search_type="similarity_score_threshold",
+#     search_kwargs={'score_threshold': 0.6}
+# )
 
 ############
 # Required to:
@@ -82,6 +98,7 @@ mlflow.models.set_retriever_schema(
     primary_key="id",
     text_column="content",
     doc_uri="url",  # Review App uses `doc_uri` to display chunks from the same document in a single view
+    other_columns=["score"],
 )
 
 
@@ -94,6 +111,7 @@ def format_context(docs):
         chunk_template.format(
             chunk_text=d.page_content,
             document_uri=d.metadata["url"],
+            score=d.metadata["score"],
         )
         for d in docs
     ]
