@@ -118,15 +118,18 @@ if not index_exists(vs_client, VECTOR_SEARCH_ENDPOINT_NAME, model_config.get("ve
 # COMMAND ----------
 
 #同期をトリガーして、テーブルに保存された新しいデータでベクターサーチのコンテンツを更新
-vs_index = vsc.get_index(
+vs_index_fullname = f"{catalog}.{db}.{embed_table_name}_vs_index"
+
+vs_index = vs_client.get_index(
   VECTOR_SEARCH_ENDPOINT_NAME, 
-  vs_index_fullname)
+  vs_index_fullname
+)
 
 try:
     vs_index.sync()
 except Exception as e:
     import time
-    time.sleep(5)
+    time.sleep(10)
     vs_index.sync()  # なぜかエラー出るが、sync()を2回実行するとエラーが出なくなる
 
 

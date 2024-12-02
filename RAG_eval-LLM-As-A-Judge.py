@@ -103,24 +103,24 @@ evaluation_results.tables["eval_results"]
 
 # COMMAND ----------
 
-import requests
-import json
+# import requests
+# import json
 
-data = {
-  "messages": [{"role": "user", "content": "エアコンの買い換えを決める際の判断基準はありますか？"}]
-}
+# data = {
+#   "messages": [{"role": "user", "content": "エアコンの買い換えを決める際の判断基準はありますか？"}]
+# }
 
-databricks_host = dbutils.notebook.entry_point.getDbutils().notebook().getContext().apiUrl().get()
-databricks_token = dbutils.notebook.entry_point.getDbutils().notebook().getContext().apiToken().get()
-headers = {"Context-Type": "text/json", "Authorization": f"Bearer {databricks_token}"}
+# databricks_host = dbutils.notebook.entry_point.getDbutils().notebook().getContext().apiUrl().get()
+# databricks_token = dbutils.notebook.entry_point.getDbutils().notebook().getContext().apiToken().get()
+# headers = {"Context-Type": "text/json", "Authorization": f"Bearer {databricks_token}"}
 
 
-url = "https://adb-241438725865650.10.azuredatabricks.net/ml/review/dev.rach_db.rach_chatbot_model/8/instructions"
-response = requests.post(
-    url=url, json=data, headers=headers
-)
+# url = "https://adb-241438725865650.10.azuredatabricks.net/ml/review/dev.rach_db.rach_chatbot_model/8/instructions"
+# response = requests.post(
+#     url=url, json=data, headers=headers
+# )
 
-print(response.json()["choices"][0]["message"]["content"])
+# print(response.json()["choices"][0]["message"]["content"])
 
 # COMMAND ----------
 
