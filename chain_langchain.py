@@ -142,17 +142,17 @@ vector_search_as_retriever = CustomDatabricksVectorSearch(
         "content",
         "url",
     ],
-).as_retriever(search_kwargs={
-    "k": 10,
-    "query_type": "ann",
-})
-# ).as_retriever(
-#     search_type="similarity_score_threshold",
-#     search_kwargs={
-#         'score_threshold': 0.7,
-#         # 'query_type': 'ann'  # 0.62s -> 0.6s
-#     }
-# )
+# ).as_retriever(search_kwargs={
+#     "k": 10,
+#     "query_type": "ann",
+# })
+).as_retriever(
+    search_type="similarity_score_threshold",
+    search_kwargs={
+        'score_threshold': 0.7,
+        # 'query_type': 'ann'  # 0.62s -> 0.6s
+    }
+)
 
 ############
 # Required to:
