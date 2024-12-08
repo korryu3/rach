@@ -7,7 +7,7 @@
 
 # COMMAND ----------
 
-# MAGIC %pip install mlflow==2.10.1 lxml==4.9.3 transformers==4.30.2 databricks-vectorsearch==0.22 databricks-sdk==0.28.0 databricks-feature-store==0.17.0 langchain==0.2.11 langchain_core==0.2.23
+# MAGIC %pip install mlflow lxml==4.9.3 transformers==4.30.2 databricks-vectorsearch==0.22 databricks-sdk==0.28.0 databricks-feature-store==0.17.0 langchain==0.2.11 langchain_core==0.2.23 langchain-community==0.2.9 databricks-agents
 # MAGIC %pip install dspy-ai -U
 
 # COMMAND ----------
@@ -18,6 +18,11 @@ dbutils.library.restartPython()
 # COMMAND ----------
 
 # MAGIC %pip list
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC ## Scraping TECH.C. Info
 
 # COMMAND ----------
 
@@ -279,6 +284,11 @@ split_html
 
 # COMMAND ----------
 
+# MAGIC %md
+# MAGIC ## Create Table
+
+# COMMAND ----------
+
 # MAGIC %run ./config
 
 # COMMAND ----------
@@ -353,6 +363,34 @@ display(spark.table(tmp_raw_data_table_name))
 sql(f"drop table if exists {tmp_raw_data_table_name}")
 
 display(spark.table(raw_data_table_name))
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC ## Contextual-Retrieval
+
+# COMMAND ----------
+
+# MAGIC %run ./approaches/embedding/contextual_retrieval
+
+# COMMAND ----------
+
+# dictにする
+
+raw_data_table_df = spark.table(raw_data_table_name).toPandas()
+raw_data_dict = raw_data_table_df.to_dict(orient='records')
+
+processed_raw_data_dict = process_and_annotate_documents(get_model('rag_chain_config.yaml'), raw_data_dict)
+
+# COMMAND ----------
+
+spark.createDataFrame(processed_raw_data_dict).write.mode('overwrite').saveAsTable(raw_data_table_name)
+display(spark.table(raw_data_table_name))
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC ## Create Embedding table
 
 # COMMAND ----------
 
