@@ -207,7 +207,7 @@ rag_prompt = ChatPromptTemplate.from_messages(
 # 一般質問用の簡易プロンプト
 no_content_prompt = ChatPromptTemplate.from_messages(
     [
-        ("system", "以下の質問に答えてください。"),
+        ("system", "ユーザーからの質問に答えてください。"),
         ("user", """【質問】\n{question}"""),
     ]
 )
@@ -282,7 +282,11 @@ model = ChatDatabricks(
 # COMMAND ----------
 
 # 一般質問かどうかを判定するchain
-classification_chain = classification_prompt | model | StrOutputParser()
+classification_chain = (
+    classification_prompt
+    | ChatDatabricks(endpoint='databricks-meta-llama-3-3-70b-instruct', extra_params={"temperature": 0, "max_tokens": 1500})
+    | StrOutputParser()
+)
 
 # COMMAND ----------
 
@@ -301,7 +305,7 @@ def select_prompt(context: str) -> ChatPromptTemplate:
 def is_general_question(question: str) -> bool:
     # LLMを使って質問を分類
     classification_result = classification_chain.invoke({"question": question}).strip().lower()
-    return classification_result == "general" or classification_result == "general."
+    return classification_result == "general"
 
 
 # COMMAND ----------
