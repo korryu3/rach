@@ -301,8 +301,6 @@ def select_prompt(context: str) -> ChatPromptTemplate:
 def is_general_question(question: str) -> bool:
     # LLMを使って質問を分類
     classification_result = classification_chain.invoke({"question": question}).strip().lower()
-    print(f"Question: {question}")
-    print(f"Question classification: {classification_result}")
     return classification_result == "general" or classification_result == "general."
 
 
