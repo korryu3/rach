@@ -49,6 +49,12 @@ import re
 # PDFいっぱいあるページ
 # https://www.tech.ac.jp/info/
 
+# 使えそうなPDF
+# https://www.tech.ac.jp/pdf/info/2-1-1.pdf
+# https://www.tech.ac.jp/pdf/info/2-3-1.pdf
+# https://www.tech.ac.jp/pdf/info/7-2.pdf
+# https://www.tech.ac.jp/pdf/info/9-2.pdf
+
 # COMMAND ----------
 
 from httpx import Timeout
@@ -99,7 +105,7 @@ urls_ls = list(sitemap_urls | work_books_urls | blog_urls)
 # pdfはいったん退避
 for url in urls_ls:
   if url.endswith('pdf'):
-    print(url)
+    print(url)  # https://www.tech.ac.jp/pdf/admission/how-to.pdf
     urls_ls.remove(url)
 
 
