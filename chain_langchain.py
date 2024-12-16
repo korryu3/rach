@@ -274,7 +274,7 @@ Classify the following question:
 ############
 model = ChatDatabricks(
     endpoint=model_config.get("llm_endpoint_name"),
-    extra_params={"temperature": 0.01, "max_tokens": 1500},
+    extra_params={"temperature": 0.7, "max_tokens": 1500},
 )
 
 # COMMAND ----------
