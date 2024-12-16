@@ -215,30 +215,6 @@ no_content_prompt = ChatPromptTemplate.from_messages(
 
 # COMMAND ----------
 
-classification_prompt = ChatPromptTemplate.from_messages(
-    [
-        (  # System prompt contains the instructions
-            "system",
-            """You are an AI assistant tasked with classifying questions into two categories: 'general' or 'specific'.
-
-General: The question asks for common knowledge, general definitions, or broad explanations.
-
-Your task is to classify the following question strictly as either 'general' or 'specific'.
-The answer must be exactly one of these two words: 'general' or 'specific'.
-Do not provide any explanations, additional text, or alternative formats.
-
-Classify the following question:
-**Answer only with 'general' or 'specific'.** e.g. 'general'"""
-        ),
-        (
-            'user', "Question: {question}"
-        )
-    ]
-)
-
-
-# COMMAND ----------
-
 # classification_prompt = ChatPromptTemplate.from_messages(
 #     [
 #         (  # System prompt contains the instructions
@@ -246,27 +222,49 @@ Classify the following question:
 #             """You are an AI assistant tasked with classifying questions into two categories: 'general' or 'specific'.
 
 # General: The question asks for common knowledge, general definitions, or broad explanations.
-# Specific: The question requires information from a specific domain, dataset, or context.
+
+# Your task is to classify the following question strictly as either 'general' or 'specific'.
+# The answer must be exactly one of these two words: 'general' or 'specific'.
+# Do not provide any explanations, additional text, or alternative formats.
 
 # Classify the following question:
-# **Answer only with 'general' or 'specific'.**
-
-# ## Examples
-# Q. What is artificial intelligence?
-# A. general
-# Q. How does a neural network work?
-# A. gemeral
-# Q. How many students are enrolled?
-# A. specific
-# Q. How many years does the school have?
-# A. specific
-# """
+# **Answer only with 'general' or 'specific'.** e.g. 'general'"""
 #         ),
 #         (
 #             'user', "Question: {question}"
 #         )
 #     ]
 # )
+
+
+# COMMAND ----------
+
+classification_prompt = ChatPromptTemplate.from_messages(
+    [
+        (  # System prompt contains the instructions
+            "system",
+            """You are an AI assistant tasked with classifying questions into two categories: 'general' or 'specific'.
+
+1. General: The question asks for common knowledge, general definitions, or broad explanations.
+Examples
+    - What is artificial intelligence?
+    - How does a neural network work?
+
+2. Specific: The question requires information from a specific domain, dataset, or context.
+    - Questions that require specific data or examples.
+    - Questions related to schools, education, or academic topics.
+Examples
+    - How many students are enrolled?
+    - How many years does the school have?
+
+Classify the following question:
+**Answer only with 'general' or 'specific'.**"""
+        ),
+        (
+            'user', "Question: {question}"
+        )
+    ]
+)
 
 
 # COMMAND ----------
