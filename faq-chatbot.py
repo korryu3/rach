@@ -364,20 +364,20 @@ sql(f"CREATE VOLUME IF NOT EXISTS {volume};")
 # COMMAND ----------
 
 # すでに同名のテーブルが存在する場合は削除
-tmp_raw_data_table_name = f'tmp_{raw_data_table_name}'
-sql(f"drop table if exists {tmp_raw_data_table_name}")
+html_raw_data_table_name = f'html_{raw_data_table_name}'
+sql(f"drop table if exists {html_raw_data_table_name}")
 
 
-spark.createDataFrame(url_html_pairs).write.mode('overwrite').saveAsTable(tmp_raw_data_table_name)
+spark.createDataFrame(url_html_pairs).write.mode('overwrite').saveAsTable(html_raw_data_table_name)
 
-display(spark.table(tmp_raw_data_table_name))
+display(spark.table(html_raw_data_table_name))
 
 # COMMAND ----------
 
 sql(f"drop table if exists {raw_data_table_name}")
 
 # すべてのドキュメントチャンクを保存する
-(spark.table(tmp_raw_data_table_name)
+(spark.table(html_raw_data_table_name)
       .filter('text is not null')
       .withColumn('split_content', F.explode(parse_and_split('text')))
       .selectExpr("split_content.content as content", "split_content.page_contents as page_contents", 'url')
@@ -401,7 +401,15 @@ display(spark.table(raw_data_table_name))
 raw_data_table_df = spark.table(raw_data_table_name).toPandas()
 raw_data_dict = raw_data_table_df.to_dict(orient='records')
 
+len(raw_data_dict)
+
+# COMMAND ----------
+
 processed_raw_data_dict = process_and_annotate_documents(get_model('rag_chain_config.yaml'), raw_data_dict)
+
+# COMMAND ----------
+
+processed_raw_data_dict
 
 # COMMAND ----------
 
