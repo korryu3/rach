@@ -405,7 +405,7 @@ len(raw_data_dict)
 
 # COMMAND ----------
 
-processed_raw_data_dict = process_and_annotate_documents(get_model('rag_chain_config.yaml'), raw_data_dict)
+processed_raw_data_dict = process_and_annotate_documents(raw_data_dict)
 
 # COMMAND ----------
 

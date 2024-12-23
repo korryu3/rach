@@ -69,10 +69,10 @@ def get_prompt_template() -> ChatPromptTemplate:
 import copy
 from tqdm import tqdm
 
-def process_and_annotate_documents(model: ChatDatabricks, split_documents: list[dict[str, str]]) -> list[dict[str, str]]:
+def process_and_annotate_documents(split_documents: list[dict[str, str]], model_config_path: str = 'rag_chain_config.yaml') -> list[dict[str, str]]:
     chain = (
         get_prompt_template()
-        | model
+        | get_model(model_config_path)
         | StrOutputParser()
     )
 
@@ -103,7 +103,7 @@ eg = [{'content': 'FUTURE’S VIEW  \nAI技術とロボットを総合的に学�
 
 # COMMAND ----------
 
-# process_and_annotate_documents(get_model('../../rag_chain_config.yaml'), eg)
+# process_and_annotate_documents(eg, '../../rag_chain_config.yaml')
 
 # COMMAND ----------
 
