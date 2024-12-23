@@ -155,7 +155,6 @@ len(urls_ls)
 
 # COMMAND ----------
 
-
 from typing import Optional
 
 def extract_page_different(soup) -> Tag:
@@ -184,32 +183,28 @@ def extract_page_webopencampus(soup) -> str:
   web_opencampus_step = soup.select("#page > main > .c-common_section")[0]
   return str(opencampus_leading) + str(web_opencampus_step)
 
-def remove_tag(article_html, selector):
-  if len(article_html.select(selector)) > 0:
-    article_html.select(selector)[0].decompose()
-
 def extract_article_html(url) -> Optional[str]:
   soup = get_soup(url)
+  
   try:
     article_html = soup.select("#page > main > article")[0]
-    # リンク集
-    remove_tag(article_html, ".c-lower_links")
-    # OpenCampus情報
-    remove_tag(article_html, ".p-course_opencampus")
-    remove_tag(article_html, "#opencampus")
-    # 専攻一覧
-    remove_tag(article_html, ".p-course_major")
-    # 専攻リンク
-    remove_tag(article_html, ".p-world_links")
-    # 資料請求とopemcampus
-    remove_tag(article_html, ".c-cta01_sm")
-    # workbook内のopemcampus情報
-    remove_tag(article_html, ".p-work_books_article__body > .p-work_books__opencampus")
-    # パンフレット
-    remove_tag(article_html, ".c-admission_cta")
+    remove_tag_selectors = [
+      ".c-lower_links",# リンク集
+      ".p-course_opencampus",# OpenCampus情報
+      "#opencampus",# OpenCampus情報
+      ".p-course_major",# 専攻一覧
+      ".p-world_links",# 専攻リンク
+      ".c-cta01_sm",# 資料請求とopemcampus
+      ".p-work_books_article__body > .p-work_books__opencampus",# workbook内のopemcampus情報
+      ".c-admission_cta" # パンフレット
+    ]
+    combined_selector = ", ".join(remove_tag_selectors)
+    for tag in article_html.select(combined_selector):
+      tag.decompose()
 
   except:
     # 個別処理
+    print('個別処理 url:', url)
     if url == 'https://www.tech.ac.jp/features/different/':
       article_html = extract_page_different(soup)
     elif url == url == 'https://www.tech.ac.jp/features/strengths/':
@@ -223,7 +218,6 @@ def extract_article_html(url) -> Optional[str]:
       return None
 
   return str(article_html)
-
 
 # COMMAND ----------
 
