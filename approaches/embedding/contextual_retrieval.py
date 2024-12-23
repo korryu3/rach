@@ -67,39 +67,37 @@ def get_prompt_template() -> ChatPromptTemplate:
 # COMMAND ----------
 
 import copy
+from tqdm import tqdm
 
 def process_and_annotate_documents(model: ChatDatabricks, split_documents: list[dict[str, str]]) -> list[dict[str, str]]:
-
-    processed_documents = []
-    prompt = get_prompt_template()
-
     chain = (
-        prompt
+        get_prompt_template()
         | model
         | StrOutputParser()
     )
 
-    for current_doc in split_documents:
-        page_contents = current_doc['page_contents']
-        tmp_current_doc = copy.deepcopy(current_doc)
-
-        # Invoke the LLM
+    def process_document(doc: dict[str, str]) -> dict[str, str]:
+        page_contents = doc['page_contents']
         input_message = {
             'page_contents': page_contents,
-            'chunk_content': current_doc['content'],
+            'chunk_content': doc['content'],
         }
-        response = chain.invoke(input_message)
+        res = chain.invoke(input_message)
+        tmp_doc = copy.copy(doc)
+        tmp_doc['content'] = res + "\n\n" + tmp_doc['content']
+        return tmp_doc
 
-        tmp_current_doc['content'] = response + "\n\n" + current_doc['content']
-        processed_documents.append(tmp_current_doc)
+    processed_documents = [process_document(doc) for doc in tqdm(split_documents)]
 
     return processed_documents
 
 # COMMAND ----------
 
 eg = [{'content': 'FUTURE’S VIEW  \nAI技術とロボットを総合的に学ぶ\nAI技術とロボットを総合的に学ぶ\nAIとものづくりのスキルを兼ね備えた総合技術者を目指し、AIスピーカーや自動運転車のようなAI搭載製品に関する実践教育を受けます。IoT技術を用いて社会課題を解決するスペシャリストを育成するプログラムに焦点を当て、プロフェッショナルの指導のもと、ソリューションの設計、実装、制御などを学びます。',
+  'page_contents':'FUTURE’S VIEW  \nAI技術とロボットを総合的に学ぶ\nAI技術とロボットを総合的に学ぶ\nAIとものづくりのスキルを兼ね備えた総合技術者を目指し、AIスピーカーや自動運転車のようなAI搭載製品に関する実践教育を受けます。IoT技術を用いて社会課題を解決するスペシャリストを育成するプログラムに焦点を当て、プロフェッショナルの指導のもと、ソリューションの設計、実装、制御などを学びます。目指せる職業  \nソフトウェア開発  \nプログラマー/Javaプログラマー/ソフトウェアプログラマー  \nシステム設計と開発  \nシステムエンジニア/システムインテグレーター  \nプロジェクト管理  \nプロジェクトマネージャー  \n専門技術分野  \nAIエンジニア/IoTエンジニア/セキュリティエンジニア/ロボットエンジニア  \n就職実績 在学中から卒業後まで、万全のサポートで「夢の実現」へと導きます\n就職実績\n卒業生の就職状況（2011〜2023年）  \n13年連続全体就職率  \n100  \n%  \n希望業界への就職率  \n91  \n.7  \n%\n\n学びのポイント',
   'url': 'https://www.tech.ac.jp/course/robot/robot-ai/'},
  {'content': '目指せる職業  \nソフトウェア開発  \nプログラマー/Javaプログラマー/ソフトウェアプログラマー  \nシステム設計と開発  \nシステムエンジニア/システムインテグレーター  \nプロジェクト管理  \nプロジェクトマネージャー  \n専門技術分野  \nAIエンジニア/IoTエンジニア/セキュリティエンジニア/ロボットエンジニア  \n就職実績 在学中から卒業後まで、万全のサポートで「夢の実現」へと導きます\n就職実績\n卒業生の就職状況（2011〜2023年）  \n13年連続全体就職率  \n100  \n%  \n希望業界への就職率  \n91  \n.7  \n%\n\n学びのポイント',
+    'page_contents':'FUTURE’S VIEW  \nAI技術とロボットを総合的に学ぶ\nAI技術とロボットを総合的に学ぶ\nAIとものづくりのスキルを兼ね備えた総合技術者を目指し、AIスピーカーや自動運転車のようなAI搭載製品に関する実践教育を受けます。IoT技術を用いて社会課題を解決するスペシャリストを育成するプログラムに焦点を当て、プロフェッショナルの指導のもと、ソリューションの設計、実装、制御などを学びます。目指せる職業  \nソフトウェア開発  \nプログラマー/Javaプログラマー/ソフトウェアプログラマー  \nシステム設計と開発  \nシステムエンジニア/システムインテグレーター  \nプロジェクト管理  \nプロジェクトマネージャー  \n専門技術分野  \nAIエンジニア/IoTエンジニア/セキュリティエンジニア/ロボットエンジニア  \n就職実績 在学中から卒業後まで、万全のサポートで「夢の実現」へと導きます\n就職実績\n卒業生の就職状況（2011〜2023年）  \n13年連続全体就職率  \n100  \n%  \n希望業界への就職率  \n91  \n.7  \n%\n\n学びのポイント',
   'url': 'https://www.tech.ac.jp/course/robot/robot-ai/'},
 ]
 
