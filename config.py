@@ -8,7 +8,7 @@ registered_model_name = "rach_chatbot_model"
 
 VECTOR_SEARCH_ENDPOINT_NAME="vs_endpoint"
 embedding_endpoint_name = "multilingual-e5-large-embedding"
-instruct_endpoint_name = "databricks-dbrx-instruct"
+instruct_endpoint_name = "aoai-gpt-4o"
 
 databricks_token_secrets_scope = "rach"
 databricks_token_secrets_key = "databricks_token"
