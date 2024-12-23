@@ -155,6 +155,7 @@ len(urls_ls)
 
 # COMMAND ----------
 
+
 from typing import Optional
 
 def extract_page_different(soup) -> Tag:
@@ -223,6 +224,7 @@ def extract_article_html(url) -> Optional[str]:
 
   return str(article_html)
 
+
 # COMMAND ----------
 
 url_html_pairs = []
@@ -265,24 +267,37 @@ html_splitter = HTMLHeaderTextSplitter(headers_to_split_on=[("h2", "header2")])
 
 # Split on H2で分割しますが、あまり小さすぎないように小さなh2チャンクはマージします
 def split_html_on_h2(html, min_chunk_size = 20, max_chunk_size=512):
-  if not html:
-      return []
-  h2_chunks = html_splitter.split_text(html)
-  chunks = []
-  previous_chunk = ""
-  # チャンクを結合し、h2の前にテキストを追加することでチャンクを結合し、小さすぎる文書を回避します
-  for c in h2_chunks:
-    # h2の結合 (注意: 重複したh2を回避するために以前のチャンクを削除することもできます)
-    content = c.metadata.get('header2', "") + "\n" + c.page_content
-    if len(tokenizer.encode(previous_chunk + content)) <= max_chunk_size/2:
-        previous_chunk += content + "\n"
-    else:
-        chunks.extend(text_splitter.split_text(previous_chunk.strip()))
-        previous_chunk = content + "\n"
-  if previous_chunk:
-      chunks.extend(text_splitter.split_text(previous_chunk.strip()))
-  # 小さすぎるチャンクの破棄
-  return [c for c in chunks if len(tokenizer.encode(c)) > min_chunk_size]
+    if not html:
+        return []
+    h2_chunks = html_splitter.split_text(html)
+    page_contents = "".join([c.page_content for c in h2_chunks])
+    chunks = []
+    previous_chunk = ""
+    results = []
+    # チャンクを結合し、h2の前にテキストを追加することでチャンクを結合し、小さすぎる文書を回避します
+    for c in h2_chunks:
+        # h2の結合 (注意: 重複したh2を回避するために以前のチャンクを削除することもできます)
+        current_h2 = c.metadata.get('header2', "")  # 現在のH2
+        content = current_h2 + "\n" + c.page_content
+        if len(tokenizer.encode(previous_chunk + content)) <= max_chunk_size/2:
+            previous_chunk += content + "\n"
+        else:
+            split_chunks = text_splitter.split_text(previous_chunk.strip())
+            for chunk in split_chunks:
+                results.append({
+                    "content": chunk,
+                    "page_contents": page_contents
+                })
+            previous_chunk = content + "\n"
+    if previous_chunk:
+        split_chunks = text_splitter.split_text(previous_chunk.strip())
+        for chunk in split_chunks:
+            results.append({
+                "content": chunk,
+                "page_contents": page_contents
+            })
+    # 小さすぎるチャンクの破棄
+    return [r for r in results if len(tokenizer.encode(r["content"])) > min_chunk_size]
  
 
 # COMMAND ----------
@@ -316,7 +331,7 @@ from mlflow import MlflowClient
 # COMMAND ----------
 
 # sparkですべてのドキュメントのチャンクを作成するためのユーザー定義関数(UDF)を作成
-@pandas_udf("array<string>")
+@pandas_udf("array<struct<content:string, page_contents:string>>")
 def parse_and_split(docs: pd.Series) -> pd.Series:
     return docs.apply(split_html_on_h2)
     
@@ -365,14 +380,14 @@ display(spark.table(tmp_raw_data_table_name))
 
 # COMMAND ----------
 
+sql(f"drop table if exists {raw_data_table_name}")
+
 # すべてのドキュメントチャンクを保存する
 (spark.table(tmp_raw_data_table_name)
       .filter('text is not null')
-      .withColumn('content', F.explode(parse_and_split('text')))
-      .drop("text")
-      .write.mode('overwrite').saveAsTable(raw_data_table_name))
-
-sql(f"drop table if exists {tmp_raw_data_table_name}")
+      .withColumn('split_content', F.explode(parse_and_split('text')))
+      .selectExpr("split_content.content as content", "split_content.page_contents as page_contents", 'url')
+      .write.saveAsTable(raw_data_table_name))
 
 display(spark.table(raw_data_table_name))
 

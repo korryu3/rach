@@ -50,7 +50,7 @@ def get_prompt_template() -> ChatPromptTemplate:
     [
         (  # システムプロンプトに指示内容を含める
             "system",
-            "{doc_content}",
+            "{page_contents}",
         ),
         # ユーザーの質問
         ("user", """以下はドキュメント全体の中で位置付けるべきチャンクです。
@@ -69,7 +69,6 @@ def get_prompt_template() -> ChatPromptTemplate:
 import copy
 
 def process_and_annotate_documents(model: ChatDatabricks, split_documents: list[dict[str, str]]) -> list[dict[str, str]]:
-    all_content_in_batch = "\n".join([d['content'] for d in split_documents])
 
     processed_documents = []
     prompt = get_prompt_template()
@@ -81,11 +80,12 @@ def process_and_annotate_documents(model: ChatDatabricks, split_documents: list[
     )
 
     for current_doc in split_documents:
+        page_contents = current_doc['page_contents']
         tmp_current_doc = copy.deepcopy(current_doc)
 
         # Invoke the LLM
         input_message = {
-            'doc_content': all_content_in_batch,
+            'page_contents': page_contents,
             'chunk_content': current_doc['content'],
         }
         response = chain.invoke(input_message)
