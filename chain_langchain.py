@@ -282,7 +282,7 @@ model = ChatDatabricks(
 # 一般質問かどうかを判定するchain
 classification_chain = (
     classification_prompt
-    | ChatDatabricks(endpoint='databricks-meta-llama-3-3-70b-instruct', extra_params={"temperature": 0, "max_tokens": 1500})
+    | ChatDatabricks(endpoint=model_config.get("llm_endpoint_name"), extra_params={"temperature": 0, "max_tokens": 1500})
     | StrOutputParser()
 )
 
