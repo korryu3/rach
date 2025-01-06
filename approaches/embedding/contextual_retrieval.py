@@ -69,7 +69,7 @@ def get_prompt_template() -> ChatPromptTemplate:
 import copy
 from tqdm import tqdm
 
-def process_and_annotate_documents(chunk: str, page_contents: str, model_config_path: str = 'rag_chain_config.yaml') -> list[dict[str, str]]:
+def process_and_annotate_document(chunk: str, page_contents: str, model_config_path: str = 'rag_chain_config.yaml') -> list[dict[str, str]]:
     chain = (
         get_prompt_template()
         | get_model(model_config_path)

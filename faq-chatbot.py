@@ -405,15 +405,43 @@ len(raw_data_dict)
 
 # COMMAND ----------
 
-processed_raw_data_dict = process_and_annotate_documents(raw_data_dict)
+import time 
+from tqdm import tqdm
+processes_list = []
+failed_list = []
+for doc in tqdm(raw_data_dict):
+    processed_raw_data_dict = {}
+    try:
+        # たまにmlflowで謎のエラーが出るので、ここでtry-catchしておく
+        processed_content = process_and_annotate_document(doc['content'], doc['page_contents'])
+        processed_raw_data_dict = {
+            'content': processed_content,
+            'page_contents': doc['page_contents'],
+            'url': doc['url'],
+        }
+        processes_list.append(processed_raw_data_dict)
+        time.sleep(0.5)
+    except Exception as e:
+        print(e)
+        failed_list.append(doc)
+        time.sleep(5)
+
+        processed_content = process_and_annotate_document(doc['content'], doc['page_contents'])
+        processed_raw_data_dict = {
+            'content': processed_content,
+            'page_contents': doc['page_contents'],
+            'url': doc['url'],
+        }
+        processes_list.append(processed_raw_data_dict)
+        time.sleep(0.5)
 
 # COMMAND ----------
 
-processed_raw_data_dict
+processes_list
 
 # COMMAND ----------
 
-spark.createDataFrame(processed_raw_data_dict).write.mode('overwrite').saveAsTable(raw_data_table_name)
+spark.createDataFrame(processes_list).write.mode('overwrite').saveAsTable(raw_data_table_name)
 display(spark.table(raw_data_table_name))
 
 # COMMAND ----------
