@@ -19,7 +19,7 @@ def get_model(model_config_path: str) -> ChatDatabricks:
     model_config = mlflow.models.ModelConfig(development_config=model_config_path)
     return ChatDatabricks(
         endpoint=model_config.get("llm_endpoint_name"),
-        extra_params={"temperature": 0, "max_tokens": 1500},
+        extra_params={"temperature": 0},
     )
 
 # COMMAND ----------
