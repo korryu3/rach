@@ -319,9 +319,29 @@ def conditional_retriever(question: str, retriever: VectorStoreRetriever, format
         return "No additional reference information is required for this question."
     else:
         # 通常通りRetrieverを実行
-        docs = retriever.invoke(question)
+        docs = retriever.invoke({"question": question})
         return format_context_fn(docs)
 
+
+# COMMAND ----------
+
+from langchain.retrievers import RePhraseQueryRetriever
+
+# HyDEプロンプトテンプレート
+hyde_prompt_template = """ \
+以下の質問の回答を書いてください。
+質問: {question}
+回答: """
+
+# HyDE Prompt
+hyde_prompt = ChatPromptTemplate.from_template(hyde_prompt_template)
+
+# HyDE retriever
+rephrase_retriever = RePhraseQueryRetriever.from_llm(
+    retriever = vector_search_as_retriever,
+    llm = model,
+    prompt = hyde_prompt,
+)
 
 # COMMAND ----------
 
@@ -334,7 +354,7 @@ chain = (
         | RunnableLambda(extract_user_query_string)
         | RunnableLambda(
             lambda question: conditional_retriever(
-                question, vector_search_as_retriever, format_context
+                question, rephrase_retriever, format_context
             )
         ),
     }
@@ -353,12 +373,12 @@ mlflow.models.set_model(model=chain)
 
 # COMMAND ----------
 
-# input_example = {
-#   "messages": [{"role": "user", "content": "授業時間は一コマどのくらいですか"}]
-# #   "messages": [{"role": "user", "content": "プログラマとは？"}]
-# }
+input_example = {
+  "messages": [{"role": "user", "content": "授業時間は一コマどのくらいですか"}]
+#   "messages": [{"role": "user", "content": "プログラマとは？"}]
+}
 
-# chain.invoke(input_example)
+chain.invoke(input_example)
 
 # COMMAND ----------
 
