@@ -150,7 +150,7 @@ vector_search_as_retriever = CustomDatabricksVectorSearch(
     search_type="similarity_score_threshold",
     search_kwargs={
         'score_threshold': 0.7,
-        # 'query_type': 'ann'  # 0.62s -> 0.6s
+        'query_type': 'hybrid'
     }
 )
 
@@ -193,18 +193,76 @@ def format_context(docs):
 ############
 # Prompt Template for generation
 ############
-prompt = ChatPromptTemplate.from_messages(
+rag_prompt = ChatPromptTemplate.from_messages(
     [
         (  # System prompt contains the instructions
             "system",
             "【参考情報】のみを参考にしながら【質問】にできるだけ正確に答えてください。わからない場合や、質問が適切でない場合は、分からない旨を答えてください。【参考情報】に記載されていない事実を答えるのはやめてください。",
         ),
         # User's question
-        ("user", """【参考情報】
-{context}
+        ("user", """【参考情報】\n{context}\n\n【質問】\n{question}"""),
+    ]
+)
 
-【質問】
-{question}"""),
+# 一般質問用の簡易プロンプト
+no_content_prompt = ChatPromptTemplate.from_messages(
+    [
+        ("system", "ユーザーからの質問に答えてください。"),
+        ("user", """【質問】\n{question}"""),
+    ]
+)
+
+
+# COMMAND ----------
+
+# classification_prompt = ChatPromptTemplate.from_messages(
+#     [
+#         (  # System prompt contains the instructions
+#             "system",
+#             """You are an AI assistant tasked with classifying questions into two categories: 'general' or 'specific'.
+
+# General: The question asks for common knowledge, general definitions, or broad explanations.
+
+# Your task is to classify the following question strictly as either 'general' or 'specific'.
+# The answer must be exactly one of these two words: 'general' or 'specific'.
+# Do not provide any explanations, additional text, or alternative formats.
+
+# Classify the following question:
+# **Answer only with 'general' or 'specific'.** e.g. 'general'"""
+#         ),
+#         (
+#             'user', "Question: {question}"
+#         )
+#     ]
+# )
+
+
+# COMMAND ----------
+
+classification_prompt = ChatPromptTemplate.from_messages(
+    [
+        (  # System prompt contains the instructions
+            "system",
+            """You are an AI assistant tasked with classifying questions into two categories: 'general' or 'specific'.
+
+1. General: The question asks for common knowledge, general definitions, or broad explanations.
+Examples
+    - What is artificial intelligence?
+    - How does a neural network work?
+
+2. Specific: The question requires information from a specific domain, dataset, or context.
+    - Questions that require specific data or examples.
+    - Questions related to schools, education, or academic topics.
+Examples
+    - How many students are enrolled?
+    - How many years does the school have?
+
+Classify the following question:
+**Answer only with 'general' or 'specific'.**"""
+        ),
+        (
+            'user', "Question: {question}"
+        )
     ]
 )
 
@@ -216,12 +274,57 @@ prompt = ChatPromptTemplate.from_messages(
 ############
 model = ChatDatabricks(
     endpoint=model_config.get("llm_endpoint_name"),
-    extra_params={"temperature": 0.01, "max_tokens": 1500},
+    extra_params={"temperature": 0.7, "max_tokens": 1500},
 )
 
-############
-# RAG Chain
-############
+# COMMAND ----------
+
+# 一般質問かどうかを判定するchain
+classification_chain = (
+    classification_prompt
+    | ChatDatabricks(endpoint=model_config.get("llm_endpoint_name"), extra_params={"temperature": 0, "max_tokens": 1500})
+    | StrOutputParser()
+)
+
+# COMMAND ----------
+
+def select_prompt(context: str) -> ChatPromptTemplate:
+    """
+    LLMを使って質問を分類し、それに応じてプロンプトを選択。
+    """
+    if context.strip() == "No additional reference information is required for this question.":
+        # Retrieverがスキップされた場合、一般質問用のプロンプトを使用
+        return no_content_prompt
+    return rag_prompt
+
+
+# COMMAND ----------
+
+def is_general_question(question: str) -> bool:
+    # LLMを使って質問を分類
+    classification_result = classification_chain.invoke({"question": question}).strip().lower()
+    return classification_result == "general"
+
+
+# COMMAND ----------
+
+from langchain_core.vectorstores.base import VectorStoreRetriever
+
+def conditional_retriever(question: str, retriever: VectorStoreRetriever, format_context_fn) -> str:
+    """
+    質問が一般的な場合は検索をスキップし、それ以外の場合はRetrieverを実行する。
+    """
+    if is_general_question(question):
+        # 検索をスキップして空の参考情報を返す
+        return "No additional reference information is required for this question."
+    else:
+        # 通常通りRetrieverを実行
+        docs = retriever.invoke(question)
+        return format_context_fn(docs)
+
+
+# COMMAND ----------
+
 chain = (
     {
         # userの質問
@@ -229,23 +332,30 @@ chain = (
         # 参考情報
         "context": itemgetter("messages")
         | RunnableLambda(extract_user_query_string)
-        | vector_search_as_retriever
-        | RunnableLambda(format_context),
+        | RunnableLambda(
+            lambda question: conditional_retriever(
+                question, vector_search_as_retriever, format_context
+            )
+        ),
     }
-    | prompt
+    | RunnableLambda(
+        lambda inputs: select_prompt(
+            context=inputs["context"]
+        ).format(
+            question=inputs["question"], context=inputs["context"]
+        )
+    )
     | model
     | StrOutputParser()
 )
-
-## Tell MLflow logging where to find your chain.
-# `mlflow.models.set_model(model=...)` function specifies the LangChain chain to use for evaluation and deployment.  This is required to log this chain to MLflow with `mlflow.langchain.log_model(...)`.
 
 mlflow.models.set_model(model=chain)
 
 # COMMAND ----------
 
 # input_example = {
-#   "messages": [{"role": "user", "content": "授業時間は一コマどのくらいですか？"}]
+#   "messages": [{"role": "user", "content": "授業時間は一コマどのくらいですか"}]
+# #   "messages": [{"role": "user", "content": "プログラマとは？"}]
 # }
 
 # chain.invoke(input_example)

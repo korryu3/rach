@@ -7,7 +7,7 @@
 
 # COMMAND ----------
 
-# MAGIC %pip install mlflow==2.10.1 lxml==4.9.3 transformers==4.30.2 databricks-vectorsearch==0.22 databricks-sdk==0.28.0 databricks-feature-store==0.17.0 langchain==0.2.11 langchain_core==0.2.23
+# MAGIC %pip install mlflow lxml==4.9.3 transformers==4.30.2 databricks-vectorsearch==0.22 databricks-sdk==0.28.0 databricks-feature-store==0.17.0 langchain==0.2.11 langchain_core==0.2.23 langchain-community==0.2.9 databricks-agents
 # MAGIC %pip install dspy-ai -U
 
 # COMMAND ----------
@@ -18,6 +18,11 @@ dbutils.library.restartPython()
 # COMMAND ----------
 
 # MAGIC %pip list
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC ## Scraping TECH.C. Info
 
 # COMMAND ----------
 
@@ -43,6 +48,12 @@ import re
 
 # PDFいっぱいあるページ
 # https://www.tech.ac.jp/info/
+
+# 使えそうなPDF
+# https://www.tech.ac.jp/pdf/info/2-1-1.pdf
+# https://www.tech.ac.jp/pdf/info/2-3-1.pdf
+# https://www.tech.ac.jp/pdf/info/7-2.pdf
+# https://www.tech.ac.jp/pdf/info/9-2.pdf
 
 # COMMAND ----------
 
@@ -94,7 +105,7 @@ urls_ls = list(sitemap_urls | work_books_urls | blog_urls)
 # pdfはいったん退避
 for url in urls_ls:
   if url.endswith('pdf'):
-    print(url)
+    print(url)  # https://www.tech.ac.jp/pdf/admission/how-to.pdf
     urls_ls.remove(url)
 
 
@@ -172,32 +183,28 @@ def extract_page_webopencampus(soup) -> str:
   web_opencampus_step = soup.select("#page > main > .c-common_section")[0]
   return str(opencampus_leading) + str(web_opencampus_step)
 
-def remove_tag(article_html, selector):
-  if len(article_html.select(selector)) > 0:
-    article_html.select(selector)[0].decompose()
-
 def extract_article_html(url) -> Optional[str]:
   soup = get_soup(url)
+  
   try:
     article_html = soup.select("#page > main > article")[0]
-    # リンク集
-    remove_tag(article_html, ".c-lower_links")
-    # OpenCampus情報
-    remove_tag(article_html, ".p-course_opencampus")
-    remove_tag(article_html, "#opencampus")
-    # 専攻一覧
-    remove_tag(article_html, ".p-course_major")
-    # 専攻リンク
-    remove_tag(article_html, ".p-world_links")
-    # 資料請求とopemcampus
-    remove_tag(article_html, ".c-cta01_sm")
-    # workbook内のopemcampus情報
-    remove_tag(article_html, ".p-work_books_article__body > .p-work_books__opencampus")
-    # パンフレット
-    remove_tag(article_html, ".c-admission_cta")
+    remove_tag_selectors = [
+      ".c-lower_links",# リンク集
+      ".p-course_opencampus",# OpenCampus情報
+      "#opencampus",# OpenCampus情報
+      ".p-course_major",# 専攻一覧
+      ".p-world_links",# 専攻リンク
+      ".c-cta01_sm",# 資料請求とopemcampus
+      ".p-work_books_article__body > .p-work_books__opencampus",# workbook内のopemcampus情報
+      ".c-admission_cta" # パンフレット
+    ]
+    combined_selector = ", ".join(remove_tag_selectors)
+    for tag in article_html.select(combined_selector):
+      tag.decompose()
 
   except:
     # 個別処理
+    print('個別処理 url:', url)
     if url == 'https://www.tech.ac.jp/features/different/':
       article_html = extract_page_different(soup)
     elif url == url == 'https://www.tech.ac.jp/features/strengths/':
@@ -254,24 +261,37 @@ html_splitter = HTMLHeaderTextSplitter(headers_to_split_on=[("h2", "header2")])
 
 # Split on H2で分割しますが、あまり小さすぎないように小さなh2チャンクはマージします
 def split_html_on_h2(html, min_chunk_size = 20, max_chunk_size=512):
-  if not html:
-      return []
-  h2_chunks = html_splitter.split_text(html)
-  chunks = []
-  previous_chunk = ""
-  # チャンクを結合し、h2の前にテキストを追加することでチャンクを結合し、小さすぎる文書を回避します
-  for c in h2_chunks:
-    # h2の結合 (注意: 重複したh2を回避するために以前のチャンクを削除することもできます)
-    content = c.metadata.get('header2', "") + "\n" + c.page_content
-    if len(tokenizer.encode(previous_chunk + content)) <= max_chunk_size/2:
-        previous_chunk += content + "\n"
-    else:
-        chunks.extend(text_splitter.split_text(previous_chunk.strip()))
-        previous_chunk = content + "\n"
-  if previous_chunk:
-      chunks.extend(text_splitter.split_text(previous_chunk.strip()))
-  # 小さすぎるチャンクの破棄
-  return [c for c in chunks if len(tokenizer.encode(c)) > min_chunk_size]
+    if not html:
+        return []
+    h2_chunks = html_splitter.split_text(html)
+    page_contents = "".join([c.page_content for c in h2_chunks])
+    chunks = []
+    previous_chunk = ""
+    results = []
+    # チャンクを結合し、h2の前にテキストを追加することでチャンクを結合し、小さすぎる文書を回避します
+    for c in h2_chunks:
+        # h2の結合 (注意: 重複したh2を回避するために以前のチャンクを削除することもできます)
+        current_h2 = c.metadata.get('header2', "")  # 現在のH2
+        content = current_h2 + "\n" + c.page_content
+        if len(tokenizer.encode(previous_chunk + content)) <= max_chunk_size/2:
+            previous_chunk += content + "\n"
+        else:
+            split_chunks = text_splitter.split_text(previous_chunk.strip())
+            for chunk in split_chunks:
+                results.append({
+                    "content": chunk,
+                    "page_contents": page_contents
+                })
+            previous_chunk = content + "\n"
+    if previous_chunk:
+        split_chunks = text_splitter.split_text(previous_chunk.strip())
+        for chunk in split_chunks:
+            results.append({
+                "content": chunk,
+                "page_contents": page_contents
+            })
+    # 小さすぎるチャンクの破棄
+    return [r for r in results if len(tokenizer.encode(r["content"])) > min_chunk_size]
  
 
 # COMMAND ----------
@@ -282,6 +302,11 @@ split_html = split_html_on_h2(html)
 # COMMAND ----------
 
 split_html
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC ## Create Table
 
 # COMMAND ----------
 
@@ -300,7 +325,7 @@ from mlflow import MlflowClient
 # COMMAND ----------
 
 # sparkですべてのドキュメントのチャンクを作成するためのユーザー定義関数(UDF)を作成
-@pandas_udf("array<string>")
+@pandas_udf("array<struct<content:string, page_contents:string>>")
 def parse_and_split(docs: pd.Series) -> pd.Series:
     return docs.apply(split_html_on_h2)
     
@@ -330,35 +355,106 @@ if len(catalog) > 0:
 
 # COMMAND ----------
 
-# sql(f"CREATE CATALOG IF NOT EXISTS {catalog};")
-sql(f"USE CATALOG {catalog};")
-sql(f"CREATE SCHEMA IF NOT EXISTS {dbName};")
-sql(f"USE SCHEMA {dbName};")
-sql(f"CREATE VOLUME IF NOT EXISTS {volume};")
+def use_catalog_and_create_schema():
+    # sql(f"CREATE CATALOG IF NOT EXISTS {catalog};")
+    sql(f"USE CATALOG {catalog};")
+    sql(f"CREATE SCHEMA IF NOT EXISTS {dbName};")
+    sql(f"USE SCHEMA {dbName};")
+    sql(f"CREATE VOLUME IF NOT EXISTS {volume};")
+
+use_catalog_and_create_schema()
 
 # COMMAND ----------
 
 # すでに同名のテーブルが存在する場合は削除
-tmp_raw_data_table_name = f'tmp_{raw_data_table_name}'
-sql(f"drop table if exists {tmp_raw_data_table_name}")
+html_raw_data_table_name = f'html_{raw_data_table_name}'
+sql(f"drop table if exists {html_raw_data_table_name}")
 
 
-spark.createDataFrame(url_html_pairs).write.mode('overwrite').saveAsTable(tmp_raw_data_table_name)
+spark.createDataFrame(url_html_pairs).write.mode('overwrite').saveAsTable(html_raw_data_table_name)
 
-display(spark.table(tmp_raw_data_table_name))
+display(spark.table(html_raw_data_table_name))
 
 # COMMAND ----------
 
-# すべてのドキュメントチャンクを保存する
-(spark.table(tmp_raw_data_table_name)
-      .filter('text is not null')
-      .withColumn('content', F.explode(parse_and_split('text')))
-      .drop("text")
-      .write.mode('overwrite').saveAsTable(raw_data_table_name))
+sql(f"drop table if exists {raw_data_table_name}")
 
-sql(f"drop table if exists {tmp_raw_data_table_name}")
+# すべてのドキュメントチャンクを保存する
+(spark.table(html_raw_data_table_name)
+      .filter('text is not null')
+      .withColumn('split_content', F.explode(parse_and_split('text')))
+      .selectExpr("split_content.content as content", "split_content.page_contents as page_contents", 'url')
+      .write.saveAsTable(raw_data_table_name))
 
 display(spark.table(raw_data_table_name))
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC ## Contextual-Retrieval
+
+# COMMAND ----------
+
+use_catalog_and_create_schema()
+
+# COMMAND ----------
+
+# MAGIC %run ./approaches/embedding/contextual_retrieval
+
+# COMMAND ----------
+
+# dictにする
+
+raw_data_table_df = spark.table(raw_data_table_name).toPandas()
+raw_data_dict = raw_data_table_df.to_dict(orient='records')
+
+len(raw_data_dict)
+
+# COMMAND ----------
+
+import time 
+from tqdm import tqdm
+processes_list = []
+failed_list = []
+
+for doc in tqdm(raw_data_dict):
+    try:
+        # たまにmlflowでkeyerror:'content'という謎のエラーが出るので、ここでtry-catchしておく
+        processed_content = process_and_annotate_document(doc['content'], doc['page_contents'])
+    except Exception as e:
+        failed_list.append(doc)
+        time.sleep(5)
+        processed_content = process_and_annotate_document(doc['content'], doc['page_contents'])
+
+    processed_raw_data_dict = {
+        'content': processed_content,
+        'page_contents': doc['page_contents'],
+        'url': doc['url'],
+    }
+    processes_list.append(processed_raw_data_dict)
+    time.sleep(0.5)
+
+# COMMAND ----------
+
+failed_list
+
+# COMMAND ----------
+
+len(processes_list)
+
+# COMMAND ----------
+
+spark.createDataFrame(processes_list).write.mode('overwrite').saveAsTable(raw_data_table_name)
+display(spark.table(raw_data_table_name))
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC ## Create Embedding table
+
+# COMMAND ----------
+
+use_catalog_and_create_schema()
 
 # COMMAND ----------
 
@@ -369,7 +465,8 @@ sql(f"""
 CREATE TABLE IF NOT EXISTS {embed_table_name} (
   id BIGINT GENERATED BY DEFAULT AS IDENTITY,
   url STRING,
-  content STRING
+  content STRING,
+  page_contents STRING
 ) TBLPROPERTIES (delta.enableChangeDataFeed = true); 
 """)
 
