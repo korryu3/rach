@@ -92,11 +92,12 @@ eg = {'content': 'FUTURE’S VIEW  \nAI技術とロボットを総合的に学�
 
 # COMMAND ----------
 
-# process_and_annotate_documents(
-#     eg['content'],
-#     eg['page_contents'],
-#     '../../rag_chain_config.yaml'
-# )
+input_data = {
+    "chunk": eg['content'],
+    "page_contents": eg['page_contents'],
+    "model_config_path": "../../rag_chain_config.yaml"
+}
+# process_and_annotate_document(**input_data)
 
 # COMMAND ----------
 
