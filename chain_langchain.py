@@ -1,9 +1,10 @@
 # Databricks notebook source
-# MAGIC %pip install databricks-agents mlflow mlflow-skinny databricks-vectorsearch
+# MAGIC %pip install databricks-langchain
+# MAGIC %pip install langchain==0.2.11 langchain-core==0.2.23 langchain-community==0.2.9
 
 # COMMAND ----------
 
-# MAGIC %pip install langchain==0.2.11 langchain-core==0.2.23 langchain-community==0.2.9
+# MAGIC %pip install databricks-agents mlflow mlflow-skinny databricks-vectorsearch
 
 # COMMAND ----------
 
@@ -18,7 +19,8 @@ import os
 
 from databricks.vector_search.client import VectorSearchClient
 
-from langchain_community.chat_models import ChatDatabricks
+# from langchain_community.chat_models import ChatDatabricks
+from databricks_langchain import ChatDatabricks
 from langchain_community.vectorstores import DatabricksVectorSearch
 
 from langchain_core.runnables import RunnableLambda
