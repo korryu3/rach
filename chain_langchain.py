@@ -1,6 +1,8 @@
 # Databricks notebook source
 # MAGIC %pip install databricks-langchain
-# MAGIC %pip install langchain==0.2.11 langchain-core==0.2.23 langchain-community==0.2.9
+# MAGIC %pip install mlflow lxml==4.9.3 transformers==4.30.2 databricks-vectorsearch==0.38 databricks-sdk==0.28.0 databricks-feature-store==0.17.0 langchain==0.2.11 langchain_core==0.2.23 langchain-community==0.2.9 databricks-agents
+# MAGIC
+# MAGIC # %pip install databricks-langchain langchain==0.2.11 langchain-core==0.2.23 langchain-community==0.2.9
 
 # COMMAND ----------
 
