@@ -17,6 +17,10 @@ dbutils.library.restartPython()
 
 # COMMAND ----------
 
+# MAGIC %run ./config
+
+# COMMAND ----------
+
 # MAGIC %pip list
 
 # COMMAND ----------
@@ -445,6 +449,25 @@ len(processes_list)
 # COMMAND ----------
 
 spark.createDataFrame(processes_list).write.mode('overwrite').saveAsTable(raw_data_table_name)
+display(spark.table(raw_data_table_name))
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC ## Add custom data
+
+# COMMAND ----------
+
+raw_data_table_df = spark.table(raw_data_table_name).toPandas()
+
+add_data_df = pd.read_csv(f'./add-data.csv')
+# urlとpage_contentsを""にする
+add_data_df = add_data_df.fillna("")
+
+raw_data_table_merged_df = pd.concat([raw_data_table_df, add_data_df], ignore_index=True)
+raw_data_dict = raw_data_table_merged_df.to_dict(orient='records')
+
+spark.createDataFrame(raw_data_dict).write.mode('overwrite').saveAsTable(raw_data_table_name)
 display(spark.table(raw_data_table_name))
 
 # COMMAND ----------
