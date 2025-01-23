@@ -21,8 +21,8 @@ import os
 
 from databricks.vector_search.client import VectorSearchClient
 
-# from langchain_community.chat_models import ChatDatabricks
-from databricks_langchain import ChatDatabricks
+from langchain_community.chat_models import ChatDatabricks
+# from databricks_langchain import ChatDatabricks
 from langchain_community.vectorstores import DatabricksVectorSearch
 
 from langchain_core.runnables import RunnableLambda
