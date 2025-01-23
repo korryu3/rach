@@ -1,5 +1,5 @@
 # Databricks notebook source
-# %pip install -qU  langchain==0.2.11 langchain_core==0.2.23 langchain-community==0.2.9 mlflow databricks-agents databricks-langchain
+# %pip install -qU  langchain==0.2.11 langchain_core==0.2.23 langchain-community==0.2.9 mlflow databricks-agents databricks-langchain=0.1.1
 
 # %restart_python
 
