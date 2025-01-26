@@ -210,25 +210,12 @@ import os
 import mlflow
 from databricks import agents
 
-API_ROOT = dbutils.notebook.entry_point.getDbutils().notebook().getContext().apiUrl().get()
-os.environ["DATABRICKS_HOST"] = API_ROOT
-API_TOKEN = dbutils.notebook.entry_point.getDbutils().notebook().getContext().apiToken().get()
-os.environ["DATABRICKS_TOKEN"] = API_TOKEN
-
 # modelをdeployする
-# deployment_info = agents.deploy(
-#     model_name,
-#     uc_model_info.version,
-#     scale_to_zero=True,
-# )
-
 deployment_info = agents.deploy(
-   model_name,
-   uc_model_info.version,
-   scale_to_zero=True,
-   environment_vars={
-      "DATABRICKS_TOKEN": "{{secrets/rach/databricks_token}}"
-})
+    model_name,
+    uc_model_info.version,
+    scale_to_zero=True,
+)
 
 browser_url = mlflow.utils.databricks_utils.get_browser_hostname()
 print(f"\n\nView deployment status: https://{browser_url}/ml/endpoints/{deployment_info.endpoint_name}")
