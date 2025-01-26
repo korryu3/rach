@@ -372,6 +372,9 @@ use_catalog_and_create_schema()
 
 # すでに同名のテーブルが存在する場合は削除
 html_raw_data_table_name = f'html_{raw_data_table_name}'
+
+# COMMAND ----------
+
 sql(f"drop table if exists {html_raw_data_table_name}")
 
 
@@ -455,6 +458,11 @@ display(spark.table(raw_data_table_name))
 
 # MAGIC %md
 # MAGIC ## Add custom data
+
+# COMMAND ----------
+
+# f'{raw_data_table_name}_original'として、raw_data_table_nameを保存
+spark.table(raw_data_table_name).write.mode('overwrite').saveAsTable(f'{raw_data_table_name}_original')
 
 # COMMAND ----------
 
