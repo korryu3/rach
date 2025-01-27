@@ -1,5 +1,5 @@
 # Databricks notebook source
-# %pip install -qU  langchain==0.2.11 langchain_core==0.2.23 langchain-community==0.2.9 mlflow databricks-agents
+# %pip install -qU  langchain==0.2.11 langchain_core==0.2.23 langchain-community==0.2.9 mlflow databricks-agents databricks-langchain=0.1.1
 
 # %restart_python
 
@@ -7,7 +7,8 @@
 
 import mlflow
 
-from langchain_community.chat_models import ChatDatabricks
+# from langchain_community.chat_models import ChatDatabricks
+from databricks_langchain import ChatDatabricks
 from langchain_core.output_parsers import StrOutputParser
 from langchain_core.prompts import (
     ChatPromptTemplate,
@@ -91,11 +92,12 @@ eg = {'content': 'FUTURE’S VIEW  \nAI技術とロボットを総合的に学�
 
 # COMMAND ----------
 
-# process_and_annotate_documents(
-#     eg['content'],
-#     eg['page_contents'],
-#     '../../rag_chain_config.yaml'
-# )
+input_data = {
+    "chunk": eg['content'],
+    "page_contents": eg['page_contents'],
+    "model_config_path": "../../rag_chain_config.yaml"
+}
+# process_and_annotate_document(**input_data)
 
 # COMMAND ----------
 

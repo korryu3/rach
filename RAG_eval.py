@@ -1,4 +1,5 @@
 # Databricks notebook source
+# MAGIC %pip install databricks-langchain=0.1.1
 # MAGIC %pip install -U -qqqq databricks-agents mlflow mlflow-skinny databricks-vectorsearch langchain==0.2.11 langchain_core==0.2.23 langchain_community==0.2.10 openai
 
 # COMMAND ----------
@@ -200,10 +201,6 @@ uc_model_info = mlflow.register_model(model_uri=logged_chain_info.model_uri, nam
 registered_agent = mlflow.langchain.load_model(f"models:/{model_name}/{uc_model_info.version}")
 
 registered_agent.invoke(input_example)
-
-# COMMAND ----------
-
-
 
 # COMMAND ----------
 
