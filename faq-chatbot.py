@@ -18,6 +18,10 @@ dbutils.library.restartPython()
 
 # COMMAND ----------
 
+# MAGIC %run ./config
+
+# COMMAND ----------
+
 # MAGIC %pip list
 
 # COMMAND ----------
@@ -369,6 +373,9 @@ use_catalog_and_create_schema()
 
 # すでに同名のテーブルが存在する場合は削除
 html_raw_data_table_name = f'html_{raw_data_table_name}'
+
+# COMMAND ----------
+
 sql(f"drop table if exists {html_raw_data_table_name}")
 
 
@@ -446,6 +453,30 @@ len(processes_list)
 # COMMAND ----------
 
 spark.createDataFrame(processes_list).write.mode('overwrite').saveAsTable(raw_data_table_name)
+display(spark.table(raw_data_table_name))
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC ## Add custom data
+
+# COMMAND ----------
+
+# f'{raw_data_table_name}_original'として、raw_data_table_nameを保存
+spark.table(raw_data_table_name).write.mode('overwrite').saveAsTable(f'{raw_data_table_name}_original')
+
+# COMMAND ----------
+
+raw_data_table_df = spark.table(raw_data_table_name).toPandas()
+
+add_data_df = pd.read_csv(f'./add-data.csv')
+# urlとpage_contentsを""にする
+add_data_df = add_data_df.fillna("")
+
+raw_data_table_merged_df = pd.concat([raw_data_table_df, add_data_df], ignore_index=True)
+raw_data_dict = raw_data_table_merged_df.to_dict(orient='records')
+
+spark.createDataFrame(raw_data_dict).write.mode('overwrite').saveAsTable(raw_data_table_name)
 display(spark.table(raw_data_table_name))
 
 # COMMAND ----------
