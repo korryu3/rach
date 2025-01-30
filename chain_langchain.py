@@ -150,7 +150,7 @@ vector_search_as_retriever = CustomDatabricksVectorSearch(
     search_type="similarity_score_threshold",
     search_kwargs={
         'score_threshold': 0.7,
-        'query_type': 'hybrid'
+        'query_type': 'hybrid',
         'k': 10,
     }
 )
