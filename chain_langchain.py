@@ -151,7 +151,7 @@ vector_search_as_retriever = CustomDatabricksVectorSearch(
     search_kwargs={
         'score_threshold': 0.7,
         'query_type': 'hybrid',
-        'k': 10,
+        'k': 20,
     }
 )
 
