@@ -109,7 +109,7 @@ prompt = ChatPromptTemplate.from_messages(
     [
         (  # System prompt contains the instructions
             "system",
-            "【参考情報】のみを参考にしながら【質問】にできるだけ正確に答えてください。わからない場合や、質問が適切でない場合は、分からない旨を答えてください。【参考情報】に記載されていない事実を答えるのはやめてください。",
+            "【参考情報】のみを参考にしながら【質問】にできるだけ正確に答えてください。わからない場合や、質問が適切でない場合は、分からない旨を答えてください。【参考情報】に記載されていない事実を答えるのはやめてください。回答は必ず日本語で答えてください。",
         ),
         # User's question
         ("user", """【参考情報】
@@ -128,7 +128,25 @@ prompt = ChatPromptTemplate.from_messages(
 ############
 model = ChatDatabricks(
     endpoint=model_config.get("llm_endpoint_name"),
-    extra_params={"temperature": 0.01, "max_tokens": 1500},
+    extra_params={"temperature": 0.7, "max_tokens": 1500},
+)
+
+from langchain.retrievers import RePhraseQueryRetriever
+
+# HyDEプロンプトテンプレート
+hyde_prompt_template = """ \
+以下の質問の回答を書いてください。
+質問: {question}
+回答: """
+
+# HyDE Prompt
+hyde_prompt = ChatPromptTemplate.from_template(hyde_prompt_template)
+
+# HyDE retriever
+rephrase_retriever = RePhraseQueryRetriever.from_llm(
+    retriever = vector_search_as_retriever,
+    llm = model,
+    prompt = hyde_prompt,
 )
 
 ############
@@ -141,7 +159,7 @@ chain = (
         # 参考情報
         "context": itemgetter("messages")
         | RunnableLambda(extract_user_query_string)
-        | vector_search_as_retriever
+        | rephrase_retriever
         | RunnableLambda(format_context),
     }
     | prompt
