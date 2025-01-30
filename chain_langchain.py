@@ -172,7 +172,7 @@ mlflow.models.set_retriever_schema(
 ############
 # Method to format the docs returned by the retriever into the prompt
 ############
-def format_context(docs):
+def format_context(docs: list[Document]) -> str:
     chunk_template = "Passage: {chunk_text}\n"
     chunk_contents = [
         chunk_template.format(
