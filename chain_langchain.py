@@ -295,11 +295,12 @@ classification_chain = (
 
 # COMMAND ----------
 
-def select_prompt(context: str) -> ChatPromptTemplate:
+from typing import Optional
+def select_prompt(context: Optional[str]) -> ChatPromptTemplate:
     """
     LLMを使って質問を分類し、それに応じてプロンプトを選択。
     """
-    if context.strip() == "No additional reference information is required for this question.":
+    if context is None:
         # Retrieverがスキップされた場合、一般質問用のプロンプトを使用
         return no_content_prompt
     return rag_prompt
@@ -317,14 +318,14 @@ def is_general_question(question: str) -> bool:
 
 from langchain_core.vectorstores.base import VectorStoreRetriever
 
-def conditional_retriever(queries: list[str], retriever: VectorStoreRetriever, hyde_retriever: VectorStoreRetriever, format_context_fn) -> str:
+def conditional_retriever(queries: list[str], retriever: VectorStoreRetriever, hyde_retriever: VectorStoreRetriever, format_context_fn) -> Optional[str]:
     """
     質問が一般的な場合は検索をスキップし、それ以外の場合はRetrieverを実行する。
     """
     original_query = queries[0]
     if is_general_question(original_query):
         # 検索をスキップして空の参考情報を返す
-        return "No additional reference information is required for this question."
+        return None
     else:
         all_docs = []
         for q in queries:
@@ -339,6 +340,10 @@ def conditional_retriever(queries: list[str], retriever: VectorStoreRetriever, h
         docs.sort(key=lambda d: d.metadata["score"], reverse=True)
 
         return format_context_fn(docs)
+
+
+# COMMAND ----------
+
 
 
 # COMMAND ----------
@@ -444,7 +449,7 @@ input_example = {
 #   "messages": [{"role": "user", "content": "プログラマとは？"}]
 }
 
-#chain.invoke(input_example)
+# chain.invoke(input_example)
 
 # COMMAND ----------
 
