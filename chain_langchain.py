@@ -289,7 +289,7 @@ model = ChatDatabricks(
 # 一般質問かどうかを判定するchain
 classification_chain = (
     classification_prompt
-    | ChatDatabricks(endpoint=model_config.get("llm_endpoint_name"), extra_params={"temperature": 0, "max_tokens": 5})
+    | ChatDatabricks(endpoint=model_config.get("llm_mini_endpoint_name"), extra_params={"temperature": 0, "max_tokens": 5})
     | StrOutputParser()
 )
 
@@ -348,13 +348,18 @@ hyde_prompt_template = """ \
 質問: {question}
 回答: """
 
+mini_model = ChatDatabricks(
+    endpoint=model_config.get("llm_mini_endpoint_name"),
+    extra_params={"temperature": 0.7, "max_tokens": 1500},
+)
+
 # HyDE Prompt
 hyde_prompt = ChatPromptTemplate.from_template(hyde_prompt_template)
 
 # HyDE retriever
 rephrase_retriever = RePhraseQueryRetriever.from_llm(
     retriever = vector_search_as_retriever,
-    llm = model,
+    llm = mini_model,
     prompt = hyde_prompt,
 )
 

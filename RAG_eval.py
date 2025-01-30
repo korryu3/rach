@@ -19,6 +19,7 @@ rag_chain_config = {
       "vector_search_endpoint_name": VECTOR_SEARCH_ENDPOINT_NAME,
       "vector_search_index_name": f"{catalog}.{dbName}.{embed_table_name}_vs_index",
       "llm_endpoint_name": instruct_endpoint_name,
+      "llm_mini_endpoint_name": instruct_mini_endpoint_name
 }
 
 config_file_name = 'rag_chain_config.yaml'
