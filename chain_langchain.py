@@ -329,7 +329,6 @@ def conditional_retriever(queries: list[str], retriever: VectorStoreRetriever, h
         for q in queries:
             docs = retriever.invoke(q)
             all_docs.extend(docs)
-            time.sleep(0.1)
         # HyDEを実行
         original_query = queries[0]
         all_docs.extend(hyde_retriever.invoke({"question": original_query}))
