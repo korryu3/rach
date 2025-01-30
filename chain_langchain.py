@@ -320,7 +320,7 @@ def is_general_question(question: str) -> bool:
 
 from langchain_core.vectorstores.base import VectorStoreRetriever
 
-def conditional_retriever(question: str, retriever: VectorStoreRetriever, format_context_fn) -> str:
+def conditional_retriever(queries: list[str], retriever: VectorStoreRetriever, hyde_retriever: VectorStoreRetriever, format_context_fn) -> str:
     """
     質問が一般的な場合は検索をスキップし、それ以外の場合はRetrieverを実行する。
     """
@@ -328,8 +328,20 @@ def conditional_retriever(question: str, retriever: VectorStoreRetriever, format
         # 検索をスキップして空の参考情報を返す
         return "No additional reference information is required for this question."
     else:
-        # 通常通りRetrieverを実行
-        docs = retriever.invoke({"question": question})
+        all_docs = []
+        for q in queries:
+            docs = retriever.invoke(q)
+            all_docs.extend(docs)
+            time.sleep(0.1)
+        # HyDEを実行
+        original_query = queries[0]
+        all_docs.extend(hyde_retriever.invoke({"question": original_query}))
+
+        # # 重複除去処理
+        docs = list({doc.page_content: doc for doc in docs}.values())
+        print("-"*40)
+        print(len(docs))
+        print(docs)
         return format_context_fn(docs)
 
 
@@ -385,9 +397,9 @@ def rewrite_question(model: ChatDatabricks, question: str) -> list[str]:
     response = rewrite_chain.invoke({"original_query": question})
     try:
         query = response.split(",")
-        return query
+        return [question] + query
     except:
-        return []
+        return [question]
 
 # COMMAND ----------
 
@@ -408,10 +420,13 @@ chain = (
         "context": itemgetter("messages")
         | RunnableLambda(extract_user_query_string)
         | RunnableLambda(
-            lambda question: conditional_retriever(
-                question, rephrase_retriever, format_context
+            lambda question: rewrite_question(model, question)
+        )
+        | RunnableLambda(
+            lambda queries: conditional_retriever(
+                queries, vector_search_as_retriever, rephrase_retriever, format_context
             )
-        ),
+        )
     }
     | RunnableLambda(
         lambda inputs: select_prompt(
@@ -433,7 +448,7 @@ input_example = {
 #   "messages": [{"role": "user", "content": "プログラマとは？"}]
 }
 
-# chain.invoke(input_example)
+chain.invoke(input_example)
 
 # COMMAND ----------
 
