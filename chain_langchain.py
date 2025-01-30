@@ -173,7 +173,7 @@ mlflow.models.set_retriever_schema(
 # Method to format the docs returned by the retriever into the prompt
 ############
 def format_context(docs: list[Document]) -> str:
-    chunk_template = "Passage: {chunk_text}\n"
+    chunk_template = "\nPassage: {chunk_text}\n"
     chunk_contents = [
         chunk_template.format(
             chunk_text=d.page_content,
@@ -335,6 +335,9 @@ def conditional_retriever(queries: list[str], retriever: VectorStoreRetriever, h
 
         # # 重複除去処理
         docs = list({doc.page_content: doc for doc in docs}.values())
+        # d.metadata["score"]でsort
+        docs.sort(key=lambda d: d.metadata["score"], reverse=True)
+
         return format_context_fn(docs)
 
 
@@ -381,7 +384,7 @@ def rewrite_question(model: ChatDatabricks, question: str) -> list[str]:
 - より専門的な表現（1つ）
 - 詳細化したバージョン（1つ）
 
-出力はカンマ区切りで記述してください。
+出力は必ず**カンマ(',')区切り**で記述してください。
 例: 要約, 言い換え1, 言い換え2, 言い換え3, 一般向け, 専門的, 詳細版
 """
     rewrite_prompt = ChatPromptTemplate.from_template(rewrite_prompt_template)
@@ -441,7 +444,7 @@ input_example = {
 #   "messages": [{"role": "user", "content": "プログラマとは？"}]
 }
 
-chain.invoke(input_example)
+#chain.invoke(input_example)
 
 # COMMAND ----------
 
