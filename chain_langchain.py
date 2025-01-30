@@ -321,7 +321,8 @@ def conditional_retriever(queries: list[str], retriever: VectorStoreRetriever, h
     """
     質問が一般的な場合は検索をスキップし、それ以外の場合はRetrieverを実行する。
     """
-    if is_general_question(question):
+    original_query = queries[0]
+    if is_general_question(original_query):
         # 検索をスキップして空の参考情報を返す
         return "No additional reference information is required for this question."
     else:
@@ -330,7 +331,6 @@ def conditional_retriever(queries: list[str], retriever: VectorStoreRetriever, h
             docs = retriever.invoke(q)
             all_docs.extend(docs)
         # HyDEを実行
-        original_query = queries[0]
         all_docs.extend(hyde_retriever.invoke({"question": original_query}))
 
         # # 重複除去処理
@@ -441,7 +441,7 @@ input_example = {
 #   "messages": [{"role": "user", "content": "プログラマとは？"}]
 }
 
-# chain.invoke(input_example)
+chain.invoke(input_example)
 
 # COMMAND ----------
 
