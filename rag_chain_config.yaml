@@ -1,3 +1,4 @@
 llm_endpoint_name: aoai-gpt-4o
+llm_mini_endpoint_name: aoai-gpt-4o-mini
 vector_search_endpoint_name: vs_endpoint
 vector_search_index_name: dev.rach_db.rach_documentation_vs_index
