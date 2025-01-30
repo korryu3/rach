@@ -335,9 +335,6 @@ def conditional_retriever(queries: list[str], retriever: VectorStoreRetriever, h
 
         # # 重複除去処理
         docs = list({doc.page_content: doc for doc in docs}.values())
-        print("-"*40)
-        print(len(docs))
-        print(docs)
         return format_context_fn(docs)
 
 
@@ -399,11 +396,6 @@ def rewrite_question(model: ChatDatabricks, question: str) -> list[str]:
 
 # COMMAND ----------
 
-question = "スーパーAIクリエイター専攻って何するの?"
-rewrite_question(model, question)
-
-# COMMAND ----------
-
 from langchain_cohere import CohereRerank
 
 # COMMAND ----------
@@ -444,7 +436,7 @@ input_example = {
 #   "messages": [{"role": "user", "content": "プログラマとは？"}]
 }
 
-chain.invoke(input_example)
+# chain.invoke(input_example)
 
 # COMMAND ----------
 
