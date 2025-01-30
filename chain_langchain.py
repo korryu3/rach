@@ -317,6 +317,19 @@ def is_general_question(question: str) -> bool:
 # COMMAND ----------
 
 from langchain_core.vectorstores.base import VectorStoreRetriever
+from mlflow.tracing.constant import SpanAttributeKey
+import json
+from mlflow.entities import SpanType
+
+# mlflowとMosaic AI Agent Evaluation(databricksのLLM-as-a-Judge)の仕様上、Context sufficientとGroundednessの評価のために使われるdocsは、mlflowでRETRIEVER属性が付いているspanの中で最後にトレースされたdocsを取ってくる。
+# そのため、下記関数を呼ばない実装だと、HyDEで取得したdocsのみが回答に使うために取得してきたdocsとして判定されてしまう。
+# なのでここでは、全てのdocsを持った、新たなRETRIEVER属性のspanを作ることで、全てのdocsを回答に使うために取得してきたdocsとして認識させるようにしている。
+def set_retrieved_documents_for_mlflow(docs: list[Document]) -> None:
+    with mlflow.tracing.fluent.start_span(
+        name="final_retrieved_docs",
+        span_type=SpanType.RETRIEVER
+    ) as retrieval_span:
+        retrieval_span.set_attribute(SpanAttributeKey.OUTPUTS, docs)
 
 def conditional_retriever(queries: list[str], retriever: VectorStoreRetriever, hyde_retriever: VectorStoreRetriever, format_context_fn) -> Optional[str]:
     """
@@ -338,6 +351,8 @@ def conditional_retriever(queries: list[str], retriever: VectorStoreRetriever, h
         unique_docs = list({doc.page_content: doc for doc in all_docs}.values())
         # d.metadata["score"]でsort
         unique_docs.sort(key=lambda d: d.metadata["score"], reverse=True)
+
+        set_retrieved_documents_for_mlflow(unique_docs)
 
         return format_context_fn(unique_docs)
 
