@@ -413,7 +413,7 @@ chain = (
         "context": itemgetter("messages")
         | RunnableLambda(extract_user_query_string)
         | RunnableLambda(
-            lambda question: rewrite_question(model, question)
+            lambda question: rewrite_question(mini_model, question)
         )
         | RunnableLambda(
             lambda queries: conditional_retriever(
