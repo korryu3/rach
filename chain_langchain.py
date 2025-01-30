@@ -335,15 +335,11 @@ def conditional_retriever(queries: list[str], retriever: VectorStoreRetriever, h
         all_docs.extend(hyde_retriever.invoke({"question": original_query}))
 
         # # 重複除去処理
-        docs = list({doc.page_content: doc for doc in docs}.values())
+        unique_docs = list({doc.page_content: doc for doc in all_docs}.values())
         # d.metadata["score"]でsort
-        docs.sort(key=lambda d: d.metadata["score"], reverse=True)
+        unique_docs.sort(key=lambda d: d.metadata["score"], reverse=True)
 
-        return format_context_fn(docs)
-
-
-# COMMAND ----------
-
+        return format_context_fn(unique_docs)
 
 
 # COMMAND ----------
