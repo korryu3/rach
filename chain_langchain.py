@@ -355,6 +355,47 @@ rephrase_retriever = RePhraseQueryRetriever.from_llm(
 
 # COMMAND ----------
 
+# 質問のre-write
+def rewrite_question(model: ChatDatabricks, question: str) -> list[str]:
+    rewrite_prompt_template = """
+
+あなたは、検索エンジンの精度を向上させるAIアシスタントです。
+ユーザーが入力したクエリをもとに、より効果的な検索を行うためのバリエーションを作成してください。
+質問には答えず、バリエーションを作ることに専念してください。
+
+質問: {original_query}
+
+- 言い換え（3つ）
+- シンプルな要約表現
+- より一般的な表現（1つ）
+- より専門的な表現（1つ）
+- 詳細化したバージョン（1つ）
+
+出力はカンマ区切りで記述してください。
+例: 要約, 言い換え1, 言い換え2, 言い換え3, 一般向け, 専門的, 詳細版
+"""
+    rewrite_prompt = ChatPromptTemplate.from_template(rewrite_prompt_template)
+
+    rewrite_chain = (
+        rewrite_prompt
+        | model
+        | StrOutputParser()
+    )
+
+    response = rewrite_chain.invoke({"original_query": question})
+    try:
+        query = response.split(",")
+        return query
+    except:
+        return []
+
+# COMMAND ----------
+
+question = "スーパーAIクリエイター専攻って何するの?"
+rewrite_question(model, question)
+
+# COMMAND ----------
+
 from langchain_cohere import CohereRerank
 
 # COMMAND ----------
