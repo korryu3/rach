@@ -352,9 +352,13 @@ def conditional_retriever(queries: list[str], retriever: VectorStoreRetriever, h
         # d.metadata["score"]でsort
         unique_docs.sort(key=lambda d: d.metadata["score"], reverse=True)
 
-        set_retrieved_documents_for_mlflow(unique_docs)
+        # 上位10つのdocsを取得(仮)
+        context_num = 10
+        docs = unique_docs[:context_num]
 
-        return format_context_fn(unique_docs)
+        set_retrieved_documents_for_mlflow(docs)
+
+        return format_context_fn(docs)
 
 
 # COMMAND ----------
