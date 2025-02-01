@@ -412,9 +412,7 @@ rephrase_retriever = RePhraseQueryRetriever.from_llm(
 
 # COMMAND ----------
 
-# 質問のre-write
-def rewrite_question(model: ChatDatabricks, question: str) -> list[str]:
-    rewrite_prompt_template = """
+rewrite_prompt_template = """
 
 あなたは、検索エンジンの精度を向上させるAIアシスタントです。
 ユーザーが入力したクエリをもとに、より効果的な検索を行うためのバリエーションを作成してください。
@@ -431,14 +429,17 @@ def rewrite_question(model: ChatDatabricks, question: str) -> list[str]:
 出力は必ず**カンマ(',')区切り**で記述してください。
 例: 要約, 言い換え1, 言い換え2, 言い換え3, 一般向け, 専門的, 詳細版
 """
-    rewrite_prompt = ChatPromptTemplate.from_template(rewrite_prompt_template)
+rewrite_prompt = ChatPromptTemplate.from_template(rewrite_prompt_template)
 
-    rewrite_chain = (
-        rewrite_prompt
-        | model
-        | StrOutputParser()
-    )
+rewrite_chain = (
+    rewrite_prompt
+    | mini_model
+    | StrOutputParser()
+)
 
+
+# 質問のre-write
+def rewrite_question(question: str) -> list[str]:
     response = rewrite_chain.invoke({"original_query": question})
     try:
         query = response.split(",")
@@ -456,7 +457,7 @@ chain = (
         "context": itemgetter("messages")
         | RunnableLambda(extract_user_query_string)
         | RunnableLambda(
-            lambda question: rewrite_question(mini_model, question)
+            lambda question: rewrite_question(question)
         )
         | RunnableLambda(
             lambda queries: conditional_retriever(
@@ -490,7 +491,7 @@ input_example = {
 #   "messages": [{"role": "user", "content": "プログラマとは？"}]
 }
 
-# chain.invoke(input_example)
+chain.invoke(input_example)
 
 # COMMAND ----------
 
