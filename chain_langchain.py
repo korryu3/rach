@@ -1,7 +1,7 @@
 # Databricks notebook source
 # MAGIC %pip install databricks-langchain=0.1.1 langchain_cohere=0.2.4
 # MAGIC %pip install mlflow lxml==4.9.3 transformers==4.30.2 databricks-vectorsearch==0.38 databricks-sdk==0.28.0 databricks-feature-store==0.17.0 langchain==0.2.11 langchain_core==0.2.23 langchain-community==0.2.9 databricks-agents
-# MAGIC
+# MAGIC %pip install python-dotenv
 # MAGIC # %pip install databricks-langchain langchain==0.2.11 langchain-core==0.2.23 langchain-community==0.2.9
 
 # COMMAND ----------
@@ -331,7 +331,7 @@ def set_retrieved_documents_for_mlflow(docs: list[Document]) -> None:
     ) as retrieval_span:
         retrieval_span.set_attribute(SpanAttributeKey.OUTPUTS, docs)
 
-def conditional_retriever(queries: list[str], retriever: VectorStoreRetriever, hyde_retriever: VectorStoreRetriever, format_context_fn) -> Optional[str]:
+def conditional_retriever(queries: list[str], retriever: VectorStoreRetriever, hyde_retriever: VectorStoreRetriever) -> Optional[str]:
     """
     質問が一般的な場合は検索をスキップし、それ以外の場合はRetrieverを実行する。
     """
@@ -352,14 +352,38 @@ def conditional_retriever(queries: list[str], retriever: VectorStoreRetriever, h
         # d.metadata["score"]でsort
         unique_docs.sort(key=lambda d: d.metadata["score"], reverse=True)
 
-        # 上位10つのdocsを取得(仮)
-        context_num = 10
-        docs = unique_docs[:context_num]
+        return unique_docs
 
-        set_retrieved_documents_for_mlflow(docs)
 
-        return format_context_fn(docs)
+# COMMAND ----------
 
+from langchain_cohere import CohereRerank
+import os
+from dotenv import load_dotenv
+
+if "COHERE_API_KEY" not in os.environ:
+    load_dotenv()
+
+rerank_model = CohereRerank(
+    cohere_api_key=os.environ["COHERE_API_KEY"],
+    model="rerank-v3.5",
+)
+
+def rerank_docs(docs: list[Document]) -> list[Document]:
+
+    # reranked_docs = rerank_model.rerank(docs)
+
+    # mock
+
+    # 上位10つのdocsを取得(仮)
+    context_num = 10
+    reranked_docs = docs[:context_num]
+
+    # ...
+
+    set_retrieved_documents_for_mlflow(reranked_docs)
+
+    return reranked_docs
 
 # COMMAND ----------
 
@@ -424,10 +448,6 @@ def rewrite_question(model: ChatDatabricks, question: str) -> list[str]:
 
 # COMMAND ----------
 
-from langchain_cohere import CohereRerank
-
-# COMMAND ----------
-
 chain = (
     {
         # userの質問
@@ -440,8 +460,14 @@ chain = (
         )
         | RunnableLambda(
             lambda queries: conditional_retriever(
-                queries, vector_search_as_retriever, rephrase_retriever, format_context
+                queries, vector_search_as_retriever, rephrase_retriever
             )
+        )
+        | RunnableLambda(
+            lambda context: rerank_docs(context) if context is not None else None
+        )
+        | RunnableLambda(
+            lambda context: format_context(context) if context is not None else None
         )
     }
     | RunnableLambda(
