@@ -369,7 +369,7 @@ rerank_model = CohereRerank(
     model="rerank-v3.5",
 )
 
-def rerank_docs(docs: list[Document]) -> list[Document]:
+def rerank_docs(query: str, docs: list[Document]) -> list[Document]:
 
     # reranked_docs = rerank_model.rerank(docs)
 
@@ -451,30 +451,33 @@ def rewrite_question(question: str) -> list[str]:
 
 chain = (
     {
-        # userの質問
+        # ユーザーの質問を抽出
         "question": itemgetter("messages") | RunnableLambda(extract_user_query_string),
-        # 参考情報
-        "context": itemgetter("messages")
-        | RunnableLambda(extract_user_query_string)
-        | RunnableLambda(
-            lambda question: rewrite_question(question)
-        )
-        | RunnableLambda(
-            lambda queries: conditional_retriever(
-                queries, vector_search_as_retriever, rephrase_retriever
-            )
-        )
-        | RunnableLambda(
-            lambda context: rerank_docs(context) if context is not None else None
-        )
-        | RunnableLambda(
-            lambda context: format_context(context) if context is not None else None
-        )
+        # 参考情報（生データ）を抽出・前処理して raw_context として出力
+        "raw_context": (
+            itemgetter("messages")
+            | RunnableLambda(extract_user_query_string)
+            | RunnableLambda(lambda question: rewrite_question(question))
+            | RunnableLambda(lambda queries: conditional_retriever(queries, vector_search_as_retriever, rephrase_retriever))
+        ),
     }
-    | RunnableLambda(
-        lambda inputs: select_prompt(
-            context=inputs["context"]
-        ).format(
+    # ここで question と raw_context を統合し、rerank_docs を実行
+    | RunnableLambda(lambda inputs: {
+        **inputs,
+        "context": (
+            rerank_docs(inputs["question"], inputs["raw_context"]) if inputs["raw_context"] is not None else None
+        )
+    })
+    # さらにフォーマット
+    | RunnableLambda(lambda inputs: {
+        **inputs,
+        "context": (
+            format_context(inputs["context"]) if inputs["context"] is not None else None
+        )
+    })
+    # プロンプトの選択と整形
+    | RunnableLambda(lambda inputs: 
+        select_prompt(context=inputs["context"]).format(
             question=inputs["question"], context=inputs["context"]
         )
     )
