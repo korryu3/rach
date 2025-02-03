@@ -232,6 +232,24 @@ prompt = ChatPromptTemplate.from_messages(
 
 # COMMAND ----------
 
+from langchain_core.vectorstores.base import VectorStoreRetriever
+from mlflow.tracing.constant import SpanAttributeKey
+import json
+from mlflow.entities import SpanType
+
+# mlflowとMosaic AI Agent Evaluation(databricksのLLM-as-a-Judge)の仕様上、Context sufficientとGroundednessの評価のために使われるdocsは、mlflowでRETRIEVER属性が付いているspanの中で最後にトレースされたdocsを取ってくる。
+# そのため、下記関数を呼ばない実装だと、HyDEで取得したdocsのみが回答に使うために取得してきたdocsとして判定されてしまう。
+# なのでここでは、全てのdocsを持った、新たなRETRIEVER属性のspanを作ることで、全てのdocsを回答に使うために取得してきたdocsとして認識させるようにしている。
+def set_retrieved_documents_for_mlflow(docs: list[Document]) -> None:
+    with mlflow.tracing.fluent.start_span(
+        name="final_retrieved_docs",
+        span_type=SpanType.RETRIEVER
+    ) as retrieval_span:
+        retrieval_span.set_attribute(SpanAttributeKey.OUTPUTS, docs)
+
+
+# COMMAND ----------
+
 ############
 # FM for generation
 ############
@@ -240,23 +258,41 @@ model = ChatDatabricks(
     extra_params={"temperature": 0.7, "max_tokens": 1500},
 )
 
-# from langchain.retrievers import RePhraseQueryRetriever
+from langchain.retrievers import RePhraseQueryRetriever
 
-# # HyDEプロンプトテンプレート
-# hyde_prompt_template = """ \
-# 以下の質問の回答を書いてください。
-# 質問: {question}
-# 回答: """
+# HyDEプロンプトテンプレート
+hyde_prompt_template = """ \
+以下の質問の回答を書いてください。
+質問: {question}
+回答: """
 
-# # HyDE Prompt
-# hyde_prompt = ChatPromptTemplate.from_template(hyde_prompt_template)
+# HyDE Prompt
+hyde_prompt = ChatPromptTemplate.from_template(hyde_prompt_template)
 
-# # HyDE retriever
-# rephrase_retriever = RePhraseQueryRetriever.from_llm(
-#     retriever = vector_search_as_retriever,
-#     llm = model,
-#     prompt = hyde_prompt,
-# )
+# HyDE retriever
+rephrase_retriever = RePhraseQueryRetriever.from_llm(
+    retriever = vector_search_as_retriever,
+    llm = model,
+    prompt = hyde_prompt,
+)
+
+def retriever_fn(query):
+    all_docs = []
+    nomal_docs = vector_search_as_retriever.invoke(query)
+    all_docs.extend(nomal_docs)
+    hyde_docs = rephrase_retriever.invoke(query)
+    all_docs.extend(hyde_docs)
+
+    # # 重複除去処理
+    unique_docs = list({doc.page_content: doc for doc in all_docs}.values())
+    # d.metadata["score"]でsort
+    unique_docs.sort(key=lambda d: d.metadata["score"], reverse=True)
+
+    docs = unique_docs[:5]
+
+    set_retrieved_documents_for_mlflow(docs)
+
+    return docs
 
 ############
 # RAG Chain
@@ -268,8 +304,8 @@ chain = (
         # 参考情報
         "context": itemgetter("messages")
         | RunnableLambda(extract_user_query_string)
-        # | rephrase_retriever
-        | vector_search_as_retriever
+        # | vector_search_as_retriever  # normal vector search
+        | RunnableLambda(retriever_fn)  # HyDE
         | RunnableLambda(format_context),
     }
     | prompt
@@ -287,7 +323,7 @@ mlflow.models.set_model(model=chain)
 input_example = {
   "messages": [{"role": "user", "content": "授業時間は一コマどのくらいですか？"}]
 }
-
+# 
 # chain.invoke(input_example)
 
 # COMMAND ----------
