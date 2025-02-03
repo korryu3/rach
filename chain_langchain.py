@@ -498,7 +498,7 @@ input_example = {
 #   "messages": [{"role": "user", "content": "プログラマとは？"}]
 }
 
-chain.invoke(input_example)
+# chain.invoke(input_example)
 
 # COMMAND ----------
 
