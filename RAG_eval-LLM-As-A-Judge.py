@@ -95,6 +95,11 @@ with mlflow.start_run(run_name="new_eval_run"):
       data=eval_set_df,
       model=f"models:/{model_name}/{uc_model_info.version}",
       model_type="databricks-agent",
+      evaluator_config={
+        "databricks-agent": {
+          "metrics": ["correctness", "context_sufficiency", "groundedness", "safety", "chunk_relevance"]
+        }
+      }
   )
 
 # COMMAND ----------
