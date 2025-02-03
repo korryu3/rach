@@ -61,27 +61,6 @@ uc_model_info = mlflow.register_model(model_uri=logged_chain_info.model_uri, nam
 
 # COMMAND ----------
 
-import json
-json_path = "eval-dataset.json"
-with open(json_path, "r") as f:
-  tmp_eval_dataset_list = json.load(f)
-
-eval_dataset_list = []
-for i, tmp_eval_dataset_dict in enumerate(tmp_eval_dataset_list, start=1):
-  eval_dataset_dict = {
-    "request": tmp_eval_dataset_dict["request"],
-    "expected_facts": tmp_eval_dataset_dict["expected_facts"],
-    "request_id": str(i)
-  }
-  eval_dataset_list.append(eval_dataset_dict)
-
-
-# COMMAND ----------
-
-eval_dataset_list
-
-# COMMAND ----------
-
 import mlflow
 import json
 
