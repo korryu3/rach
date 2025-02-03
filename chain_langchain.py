@@ -342,6 +342,8 @@ def conditional_retriever(queries: list[str], retriever: VectorStoreRetriever, h
     else:
         all_docs = []
         for q in queries:
+            if q == '':
+                continue
             docs = retriever.invoke(q)
             all_docs.extend(docs)
         # HyDEを実行
@@ -370,7 +372,7 @@ rerank_model = CohereRerank(
 )
 
 def rerank_docs(query: str, docs: list[Document], top_n: int = 5) -> list[Document]:
-    reranked_docs_idx_and_score = rerank_model.rerank(
+    reranked_docs_idx_and_score_list = rerank_model.rerank(
         query=query,
         documents=docs,
         top_n=top_n,
@@ -378,8 +380,9 @@ def rerank_docs(query: str, docs: list[Document], top_n: int = 5) -> list[Docume
     )
 
     reranked_docs = []
-    for reranked_doc_idx, score in reranked_docs_idx_and_score:
-        docs[int(reranked_doc_idx)].metadata["relevance_score"] = score
+    for reranked_doc_idx_and_score in reranked_docs_idx_and_score_list:
+        reranked_doc_idx = reranked_doc_idx_and_score['index']
+        docs[reranked_doc_idx].metadata["relevance_score"] = reranked_doc_idx_and_score['relevance_score']
         reranked_docs.append(docs[reranked_doc_idx])
 
     set_retrieved_documents_for_mlflow(reranked_docs)
