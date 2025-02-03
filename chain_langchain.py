@@ -369,17 +369,18 @@ rerank_model = CohereRerank(
     model="rerank-v3.5",
 )
 
-def rerank_docs(query: str, docs: list[Document]) -> list[Document]:
+def rerank_docs(query: str, docs: list[Document], top_n: int = 5) -> list[Document]:
+    reranked_docs_idx_and_score = rerank_model.rerank(
+        query=query,
+        documents=docs,
+        top_n=top_n,
+        model="rerank-v3.5",
+    )
 
-    # reranked_docs = rerank_model.rerank(docs)
-
-    # mock
-
-    # 上位10つのdocsを取得(仮)
-    context_num = 10
-    reranked_docs = docs[:context_num]
-
-    # ...
+    reranked_docs = []
+    for reranked_doc_idx, score in reranked_docs_idx_and_score:
+        docs[int(reranked_doc_idx)].metadata["relevance_score"] = score
+        reranked_docs.append(docs[reranked_doc_idx])
 
     set_retrieved_documents_for_mlflow(reranked_docs)
 
