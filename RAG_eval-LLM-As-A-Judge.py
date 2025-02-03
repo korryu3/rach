@@ -1,6 +1,7 @@
 # Databricks notebook source
 # MAGIC %pip install databricks-langchain=0.1.1 langchain_cohere=0.2.4
 # MAGIC %pip install -U -qqqq  databricks-agents mlflow mlflow-skinny databricks-vectorsearch langchain==0.2.11 langchain_core==0.2.23 langchain_community==0.2.10
+# MAGIC %pip install python-dotenv
 # MAGIC %restart_python
 
 # COMMAND ----------
@@ -86,6 +87,7 @@ model_name = f"{catalog}.{dbName}.{registered_model_name}"
 with mlflow.start_run(run_name="new_eval_run"):
   evaluation_results = mlflow.evaluate(
       data=eval_set_df,
+      # data=exsample_eval_set,
       model=f"models:/{model_name}/{uc_model_info.version}",
       model_type="databricks-agent",
   )
