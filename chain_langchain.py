@@ -19,6 +19,7 @@ import os
 from databricks.vector_search.client import VectorSearchClient
 
 from langchain_community.chat_models import ChatDatabricks
+# from databricks_langchain import ChatDatabricks
 from langchain_community.vectorstores import DatabricksVectorSearch
 
 from langchain_core.runnables import RunnableLambda
@@ -31,6 +32,78 @@ from langchain_core.prompts import (
 
 ## Enable MLflow Tracing
 mlflow.langchain.autolog()
+
+from langchain.schema import Document
+from typing import Optional, Dict, Any, List
+
+# scoreを返したいので、独自に実装する
+# .as_retrieverでやると、similarity_search が内部で呼ばれるため、scoreが返ってくる similarity_search_with_scoreを呼ぶようにしている
+# https://qiita.com/Oxyride/items/ac7e32714f5fa673d9e4
+class CustomDatabricksVectorSearch(DatabricksVectorSearch):
+    # search_type: simirarity
+    def similarity_search(
+        self,
+        query: str,
+        k: int = 4,
+        filter: Optional[Dict[str, Any]] = None,
+        *,
+        query_type: Optional[str] = None,
+        **kwargs: Any,
+    ) -> List[Document]:
+        """Return docs most similar to query.
+
+        Args:
+            query: Text to look up documents similar to.
+            k: Number of Documents to return. Defaults to 4.
+            filter: Filters to apply to the query. Defaults to None.
+            query_type: The type of this query. Supported values are "ANN" and "HYBRID".
+
+        Returns:
+            List of Documents most similar to the embedding.
+        """
+        docs_with_score = self.similarity_search_with_score(
+            query=query,
+            k=k,
+            filter=filter,
+            query_type=query_type,
+            **kwargs,
+        )
+        for doc, score in docs_with_score:
+            # 類似度スコアを保存する
+            doc.metadata['score'] = score
+        return [doc for doc, _ in docs_with_score]
+
+    # search_type: similarity_score_threshold
+    def _similarity_search_with_relevance_scores(
+        self,
+        query: str,
+        k: int = 4,
+        **kwargs: Any,
+    ) -> list[tuple[Document, float]]:
+        """
+        Default similarity search with relevance scores. Modify if necessary
+        in subclass.
+        Return docs and relevance scores in the range [0, 1].
+
+        0 is dissimilar, 1 is most similar.
+
+        Args:
+            query: Input text.
+            k: Number of Documents to return. Defaults to 4.
+            **kwargs: kwargs to be passed to similarity search. Should include:
+                score_threshold: Optional, a floating point value between 0 to 1 to
+                    filter the resulting set of retrieved docs
+
+        Returns:
+            List of Tuples of (doc, similarity_score)
+        """
+        relevance_score_fn = self._select_relevance_score_fn()
+        docs_and_scores = self.similarity_search_with_score(query, k, **kwargs)
+        docs_and_similarity_scores = [(doc, relevance_score_fn(score)) for doc, score in docs_and_scores]
+        for doc, score in docs_and_similarity_scores:
+            # 類似度スコアを保存する
+            doc.metadata['score'] = score
+        return docs_and_similarity_scores
 
 
 ############
@@ -62,7 +135,7 @@ vs_index = vs_client.get_index(
 ############
 # Turn the Vector Search index into a LangChain retriever
 ############
-vector_search_as_retriever = DatabricksVectorSearch(
+vector_search_as_retriever = CustomDatabricksVectorSearch(
     vs_index,
     text_column="content",
     columns=[
@@ -70,8 +143,44 @@ vector_search_as_retriever = DatabricksVectorSearch(
         "content",
         "url",
     ],
-).as_retriever(search_kwargs={"k": 10, "query_type": "ann"})
+).as_retriever(
+    search_type="similarity_score_threshold",
+    search_kwargs={
+        'score_threshold': 0.7,
+        'query_type': 'hybrid',
+        'k': 5,
+    }
+)
 
+############
+# Required to:
+# 1. Enable the RAG Studio Review App to properly display retrieved chunks
+# 2. Enable evaluation suite to measure the retriever
+############
+
+mlflow.models.set_retriever_schema(
+    primary_key="id",
+    text_column="content",
+    doc_uri="url",  # Review App uses `doc_uri` to display chunks from the same document in a single view
+    other_columns=["score"],
+)
+
+
+############
+# Method to format the docs returned by the retriever into the prompt
+############
+def format_context(docs: list[Document]) -> str:
+    chunk_template = "\nPassage: {chunk_text}\n"
+    chunk_contents = [
+        chunk_template.format(
+            chunk_text=d.page_content,
+            document_uri=d.metadata["url"],
+            score=d.metadata["score"],
+        )
+        for d in docs
+    ]
+
+    return "".join(chunk_contents)
 ############
 # Required to:
 # 1. Enable the RAG Studio Review App to properly display retrieved chunks
@@ -131,23 +240,23 @@ model = ChatDatabricks(
     extra_params={"temperature": 0.7, "max_tokens": 1500},
 )
 
-from langchain.retrievers import RePhraseQueryRetriever
+# from langchain.retrievers import RePhraseQueryRetriever
 
-# HyDEプロンプトテンプレート
-hyde_prompt_template = """ \
-以下の質問の回答を書いてください。
-質問: {question}
-回答: """
+# # HyDEプロンプトテンプレート
+# hyde_prompt_template = """ \
+# 以下の質問の回答を書いてください。
+# 質問: {question}
+# 回答: """
 
-# HyDE Prompt
-hyde_prompt = ChatPromptTemplate.from_template(hyde_prompt_template)
+# # HyDE Prompt
+# hyde_prompt = ChatPromptTemplate.from_template(hyde_prompt_template)
 
-# HyDE retriever
-rephrase_retriever = RePhraseQueryRetriever.from_llm(
-    retriever = vector_search_as_retriever,
-    llm = model,
-    prompt = hyde_prompt,
-)
+# # HyDE retriever
+# rephrase_retriever = RePhraseQueryRetriever.from_llm(
+#     retriever = vector_search_as_retriever,
+#     llm = model,
+#     prompt = hyde_prompt,
+# )
 
 ############
 # RAG Chain
@@ -159,7 +268,8 @@ chain = (
         # 参考情報
         "context": itemgetter("messages")
         | RunnableLambda(extract_user_query_string)
-        | rephrase_retriever
+        # | rephrase_retriever
+        | vector_search_as_retriever
         | RunnableLambda(format_context),
     }
     | prompt
@@ -174,9 +284,9 @@ mlflow.models.set_model(model=chain)
 
 # COMMAND ----------
 
-# input_example = {
-#   "messages": [{"role": "user", "content": "授業時間は一コマどのくらいですか？"}]
-# }
+input_example = {
+  "messages": [{"role": "user", "content": "授業時間は一コマどのくらいですか？"}]
+}
 
 # chain.invoke(input_example)
 
