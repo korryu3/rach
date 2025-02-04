@@ -321,9 +321,13 @@ from mlflow.tracing.constant import SpanAttributeKey
 import json
 from mlflow.entities import SpanType
 
-# mlflowとMosaic AI Agent Evaluation(databricksのLLM-as-a-Judge)の仕様上、Context sufficientとGroundednessの評価のために使われるdocsは、mlflowでRETRIEVER属性が付いているspanの中で最後にトレースされたdocsを取ってくる。
-# そのため、下記関数を呼ばない実装だと、HyDEで取得したdocsのみが回答に使うために取得してきたdocsとして判定されてしまう。
-# なのでここでは、全てのdocsを持った、新たなRETRIEVER属性のspanを作ることで、全てのdocsを回答に使うために取得してきたdocsとして認識させるようにしている。
+# mlflowとMosaic AI Agent Evaluation (DatabricksのLLM-as-a-Judge) の仕様上、
+# Context Sufficient と Groundedness の評価に使われるdocsは、
+# mlflowでRETRIEVER属性が付いたspanの中でも最後にトレースされたものが対象となる。
+#
+# この関数を使わない場合、HyDEで取得したdocsのみが「回答に使用するために取得したdocs」と判定されてしまう。
+# そこで、新たにRETRIEVER属性を持つspanを作成し、すべてのdocsを含めることで、
+# 正しく評価対象として認識されるようにする。
 def set_retrieved_documents_for_mlflow(docs: list[Document]) -> None:
     with mlflow.tracing.fluent.start_span(
         name="final_retrieved_docs",
