@@ -212,6 +212,9 @@ import os
 import mlflow
 from databricks import agents
 import os
+from dotenv import load_dotenv
+
+load_dotenv()
 
 # modelをdeployする
 deployment_info = agents.deploy(
