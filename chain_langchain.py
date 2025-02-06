@@ -1,5 +1,6 @@
 # Databricks notebook source
-# MAGIC %pip install databricks-langchain=0.1.1 langchain_cohere=0.2.4
+# MAGIC %pip install databricks-langchain=0.1.1
+# MAGIC %pip install cohere
 # MAGIC %pip install mlflow lxml==4.9.3 transformers==4.30.2 databricks-vectorsearch==0.38 databricks-sdk==0.28.0 databricks-feature-store==0.17.0 langchain==0.2.11 langchain_core==0.2.23 langchain-community==0.2.9 databricks-agents
 # MAGIC %pip install python-dotenv
 # MAGIC # %pip install databricks-langchain langchain==0.2.11 langchain-core==0.2.23 langchain-community==0.2.9
@@ -363,30 +364,30 @@ def conditional_retriever(queries: list[str], retriever: VectorStoreRetriever, h
 
 # COMMAND ----------
 
-from langchain_cohere import CohereRerank
+import cohere
 import os
 from dotenv import load_dotenv
 
 if "COHERE_API_KEY" not in os.environ:
     load_dotenv()
 
-rerank_model = CohereRerank(
-    cohere_api_key=os.environ["COHERE_API_KEY"],
-    model="rerank-v3.5",
-)
+rerank_model = cohere.ClientV2(os.environ["COHERE_API_KEY"],)
 
 def rerank_docs(query: str, docs: list[Document], top_n: int = 5) -> list[Document]:
-    reranked_docs_idx_and_score_list = rerank_model.rerank(
+
+    docs_content = [d.page_content for d in docs]
+
+    results = rerank_model.rerank(
         query=query,
-        documents=docs,
+        documents=docs_content,
         top_n=top_n,
         model="rerank-v3.5",
-    )
+    ).results
 
     reranked_docs = []
-    for reranked_doc_idx_and_score in reranked_docs_idx_and_score_list:
-        reranked_doc_idx = reranked_doc_idx_and_score['index']
-        docs[reranked_doc_idx].metadata["relevance_score"] = reranked_doc_idx_and_score['relevance_score']
+    for reranked_doc_idx_and_score in results:
+        reranked_doc_idx = reranked_doc_idx_and_score.index
+        docs[reranked_doc_idx].metadata["relevance_score"] = reranked_doc_idx_and_score.relevance_score
         reranked_docs.append(docs[reranked_doc_idx])
 
     set_retrieved_documents_for_mlflow(reranked_docs)
