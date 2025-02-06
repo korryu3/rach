@@ -1,6 +1,7 @@
 # Databricks notebook source
-# MAGIC %pip install databricks-langchain=0.1.1
+# MAGIC %pip install databricks-langchain=0.1.1 langchain_cohere=0.2.4
 # MAGIC %pip install -U -qqqq  databricks-agents mlflow mlflow-skinny databricks-vectorsearch langchain==0.2.11 langchain_core==0.2.23 langchain_community==0.2.10
+# MAGIC %pip install python-dotenv
 # MAGIC %restart_python
 
 # COMMAND ----------
@@ -66,13 +67,8 @@ import pandas as pd
 exsample_eval_set  = [
     {
       "request_id": "1",
-      "request": "Zenith ZR-450のタッチスクリーン操作パネルの反応が鈍いです。どうしたら良いですか？",  # question
-      "expected_retrieved_context": [
-        {
-            "doc_uri": "https://example.com/1855",
-        }
-      ],
-      "expected_response": "Zenith ZR-450のタッチスクリーンが鈍い場合の具体的な対処法は以下の通りです：\n	1.	画面を清掃してください。\n	2.	改善しない場合は、ファームウェアのアップデートを確認してください。\n	3.	それでも解決しない場合は、サポートセンターに連絡して技術的なサポートを受けてください。\n\nこちらが正しい対応手順となります。"  # 模範解答
+      "request": "AO入学はありますか？",  # question
+      "expected_response": "はい、あります！AO入学制度は、学力試験だけでは評価できない個性や意欲を重視した入学選考方法です。"  # 模範解答
     },
 ]
 
@@ -91,6 +87,7 @@ model_name = f"{catalog}.{dbName}.{registered_model_name}"
 with mlflow.start_run(run_name="new_eval_run"):
   evaluation_results = mlflow.evaluate(
       data=eval_set_df,
+      # data=exsample_eval_set,
       model=f"models:/{model_name}/{uc_model_info.version}",
       model_type="databricks-agent",
   )
