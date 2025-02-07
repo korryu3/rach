@@ -324,21 +324,26 @@ from mlflow.tracing.constant import SpanAttributeKey
 import json
 from mlflow.entities import SpanType
 
-# mlflowとMosaic AI Agent Evaluation (DatabricksのLLM-as-a-Judge) の仕様上、
-# Context Sufficient と Groundedness の評価に使われるdocsは、
-# mlflowでRETRIEVER属性が付いたspanの中でも最後にトレースされたものが対象となる。
-#
-# この関数を使わない場合、HyDEで取得したdocsのみが「回答に使用するために取得したdocs」と判定されてしまう。
-# そこで、新たにRETRIEVER属性を持つspanを作成し、すべてのdocsを含めることで、
-# 正しく評価対象として認識されるようにする。
 def set_retrieved_documents_for_mlflow(docs: list[Document]) -> None:
+    """
+    documentをmlflowのtraceに載せる関数
+
+    # この関数を作るにあたった経緯
+
+    mlflowとMosaic AI Agent Evaluation (DatabricksのLLM-as-a-Judge) の仕様上、
+    Context Sufficient と Groundedness の評価に使われるdocsは、
+    mlflowでRETRIEVER属性が付いたspanの中でも最後にトレースされたものが対象となる。
+    
+    この関数を使わない場合、HyDEで取得したdocsのみが「回答に使用するために取得したdocs」と判定されてしまう。
+    そこで、新たにRETRIEVER属性を持つspanを作成し、すべてのdocsを含めることで、正しく評価対象として認識されるようにする。
+    """
     with mlflow.tracing.fluent.start_span(
         name="final_retrieved_docs",
         span_type=SpanType.RETRIEVER
     ) as retrieval_span:
         retrieval_span.set_attribute(SpanAttributeKey.OUTPUTS, docs)
 
-def parallel_retrieval_grouped(queries: list[str], retriever) -> list[Document]:
+def parallel_retrieval(queries: list[str], retriever) -> list[Document]:
     """各クエリに対して retriever.invoke を並列実行して結果を集約する"""
     all_docs = []
     with ThreadPoolExecutor() as executor:
@@ -471,7 +476,7 @@ from langchain_core.runnables import RunnableParallel
 parallel_docs_chain = (
     RunnableParallel({
         "retriever_docs": RunnableLambda(
-            lambda inputs: parallel_retrieval_grouped(inputs["queries"], vector_search_as_retriever)
+            lambda inputs: parallel_retrieval(inputs["queries"], vector_search_as_retriever)
         ),
         "hyde_docs": RunnableLambda(
             lambda inputs: rephrase_retriever.invoke({"question": inputs["question"]})
@@ -479,6 +484,13 @@ parallel_docs_chain = (
     })
     | RunnableLambda(merge_and_sort_docs)
 )
+
+def get_docs(inputs: dict) -> dict:
+    if is_general_question(inputs["question"]):
+        return {**inputs, "docs": None}
+    else:
+        parallel_result = parallel_docs_chain.invoke(inputs)
+        return {**inputs, **parallel_result}
 
 chain = (
     {
@@ -489,14 +501,7 @@ chain = (
                    | RunnableLambda(extract_user_query_string)
                    | RunnableLambda(lambda question: rewrite_question(question))
     }
-    | RunnableLambda(
-         # 一般的な質問の場合は検索をスキップ（docs を None に設定）
-         # そうでなければ、以降の並列検索チェーンを実行して取得した docs を後でマージする
-         lambda inputs: (
-             {**inputs, "docs": None} if is_general_question(inputs["question"])
-             else {**inputs, "docs": parallel_docs_chain.invoke(inputs)["docs"]}
-         )
-       )
+    | RunnableLambda(get_docs)
     | RunnableLambda(
          # 取得した docs が存在する場合、再ランキングを実施
          lambda inputs: {**inputs, "docs": rerank_docs(inputs["question"], inputs["docs"])}
@@ -527,7 +532,7 @@ input_example = {
 #   "messages": [{"role": "user", "content": "プログラマとは？"}]
 }
 
-chain.invoke(input_example)
+# chain.invoke(input_example)
 
 # COMMAND ----------
 
