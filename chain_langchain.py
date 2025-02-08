@@ -317,50 +317,63 @@ def is_general_question(question: str) -> bool:
 
 # COMMAND ----------
 
+from concurrent.futures import ThreadPoolExecutor, as_completed
+
 from langchain_core.vectorstores.base import VectorStoreRetriever
 from mlflow.tracing.constant import SpanAttributeKey
 import json
 from mlflow.entities import SpanType
 
-# mlflowとMosaic AI Agent Evaluation (DatabricksのLLM-as-a-Judge) の仕様上、
-# Context Sufficient と Groundedness の評価に使われるdocsは、
-# mlflowでRETRIEVER属性が付いたspanの中でも最後にトレースされたものが対象となる。
-#
-# この関数を使わない場合、HyDEで取得したdocsのみが「回答に使用するために取得したdocs」と判定されてしまう。
-# そこで、新たにRETRIEVER属性を持つspanを作成し、すべてのdocsを含めることで、
-# 正しく評価対象として認識されるようにする。
 def set_retrieved_documents_for_mlflow(docs: list[Document]) -> None:
+    """
+    documentをmlflowのtraceに載せる関数
+
+    # この関数を作るにあたった経緯
+
+    mlflowとMosaic AI Agent Evaluation (DatabricksのLLM-as-a-Judge) の仕様上、
+    Context Sufficient と Groundedness の評価に使われるdocsは、
+    mlflowでRETRIEVER属性が付いたspanの中でも最後にトレースされたものが対象となる。
+    
+    この関数を使わない場合、HyDEで取得したdocsのみが「回答に使用するために取得したdocs」と判定されてしまう。
+    そこで、新たにRETRIEVER属性を持つspanを作成し、すべてのdocsを含めることで、正しく評価対象として認識されるようにする。
+    """
     with mlflow.tracing.fluent.start_span(
         name="final_retrieved_docs",
         span_type=SpanType.RETRIEVER
     ) as retrieval_span:
         retrieval_span.set_attribute(SpanAttributeKey.OUTPUTS, docs)
 
-def conditional_retriever(queries: list[str], retriever: VectorStoreRetriever, hyde_retriever: VectorStoreRetriever) -> Optional[str]:
-    """
-    質問が一般的な場合は検索をスキップし、それ以外の場合はRetrieverを実行する。
-    """
-    original_query = queries[0]
-    if is_general_question(original_query):
-        # 検索をスキップして空の参考情報を返す
-        return None
-    else:
-        all_docs = []
-        for q in queries:
-            if q == '':
-                continue
-            docs = retriever.invoke(q)
+def parallel_retrieval(queries: list[str], retriever) -> list[Document]:
+    """各クエリに対して retriever.invoke を並列実行して結果を集約する"""
+    all_docs = []
+    with ThreadPoolExecutor() as executor:
+        # クエリの並列処理は、mlflowのtraceが複数にまたがってしまうので非常によろしくないが、並列だと3s短縮されるのでこちらのメリットの方が大きいと判断
+        futures = {executor.submit(retriever.invoke, q): q for q in queries if q != ''}
+        for future in as_completed(futures):
+            docs = future.result()
             all_docs.extend(docs)
-        # HyDEを実行
-        all_docs.extend(hyde_retriever.invoke({"question": original_query}))
+        
+    return all_docs
 
-        # # 重複除去処理
-        unique_docs = list({doc.page_content: doc for doc in all_docs}.values())
-        # d.metadata["score"]でsort
-        unique_docs.sort(key=lambda d: d.metadata["score"], reverse=True)
 
-        return unique_docs
+# COMMAND ----------
 
+def merge_and_sort_docs(docs_dict: dict) -> dict:
+    """
+    docs_dict は
+      {
+          "retriever_docs": [...],
+          "hyde_docs": [...]
+      }
+    の形式で、両方の結果をマージして重複除去、スコアで降順ソートした docs を
+    辞書として { "docs": unique_docs } で返す
+    """
+    retriever_docs = docs_dict.get("retriever_docs", [])
+    hyde_docs = docs_dict.get("hyde_docs", [])
+    all_docs = retriever_docs + hyde_docs
+    # 重複除去（page_content をキーに）
+    unique_docs = list({doc.page_content: doc for doc in all_docs}.values())
+    return {"docs": unique_docs}
 
 # COMMAND ----------
 
@@ -458,41 +471,57 @@ def rewrite_question(question: str) -> list[str]:
 
 # COMMAND ----------
 
+from langchain_core.runnables import RunnableParallel
+
+parallel_docs_chain = (
+    RunnableParallel({
+        "retriever_docs": RunnableLambda(
+            lambda inputs: parallel_retrieval(inputs["queries"], vector_search_as_retriever)
+        ),
+        "hyde_docs": RunnableLambda(
+            lambda inputs: rephrase_retriever.invoke({"question": inputs["question"]})
+        )
+    })
+    | RunnableLambda(merge_and_sort_docs)
+)
+
+def get_docs(inputs: dict) -> dict:
+    if is_general_question(inputs["question"]):
+        return {**inputs, "docs": None}
+    else:
+        parallel_result = parallel_docs_chain.invoke(inputs)
+        return {**inputs, **parallel_result}
+
 chain = (
     {
-        # ユーザーの質問を抽出
+        # ユーザーの質問抽出
         "question": itemgetter("messages") | RunnableLambda(extract_user_query_string),
-        # 参考情報（生データ）を抽出・前処理して raw_context として出力
-        "raw_context": (
-            itemgetter("messages")
-            | RunnableLambda(extract_user_query_string)
-            | RunnableLambda(lambda question: rewrite_question(question))
-            | RunnableLambda(lambda queries: conditional_retriever(queries, vector_search_as_retriever, rephrase_retriever))
-        ),
+        # HyDE用などの複数クエリ生成（例：リライト処理）
+        "queries": itemgetter("messages")
+                   | RunnableLambda(extract_user_query_string)
+                   | RunnableLambda(lambda question: rewrite_question(question))
     }
-    # ここで question と raw_context を統合し、rerank_docs を実行
-    | RunnableLambda(lambda inputs: {
-        **inputs,
-        "context": (
-            rerank_docs(inputs["question"], inputs["raw_context"]) if inputs["raw_context"] is not None else None
-        )
-    })
-    # さらにフォーマット
-    | RunnableLambda(lambda inputs: {
-        **inputs,
-        "context": (
-            format_context(inputs["context"]) if inputs["context"] is not None else None
-        )
-    })
-    # プロンプトの選択と整形
-    | RunnableLambda(lambda inputs: 
-        select_prompt(context=inputs["context"]).format(
-            question=inputs["question"], context=inputs["context"]
-        )
-    )
+    | RunnableLambda(get_docs)
+    | RunnableLambda(
+         # 取得した docs が存在する場合、再ランキングを実施
+         lambda inputs: {**inputs, "docs": rerank_docs(inputs["question"], inputs["docs"])}
+         if inputs.get("docs") is not None else inputs
+       )
+    | RunnableLambda(
+         # 再ランキング後の docs を用いて、最終的な文脈 (context) を生成
+         lambda inputs: {**inputs, "context": format_context(inputs["docs"])}
+         if inputs.get("docs") is not None else {**inputs, "context": None}
+       )
+    | RunnableLambda(
+         # プロンプト選択。ここでは inputs に "question" と "context" があることを前提とする
+         lambda inputs: select_prompt(context=inputs["context"]).format(
+             question=inputs["question"], context=inputs["context"]
+         )
+       )
     | model
     | StrOutputParser()
 )
+
 
 mlflow.models.set_model(model=chain)
 
