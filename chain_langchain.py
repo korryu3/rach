@@ -1,7 +1,8 @@
 # Databricks notebook source
 # MAGIC %pip install databricks-langchain=0.1.1
+# MAGIC %pip install cohere
 # MAGIC %pip install mlflow lxml==4.9.3 transformers==4.30.2 databricks-vectorsearch==0.38 databricks-sdk==0.28.0 databricks-feature-store==0.17.0 langchain==0.2.11 langchain_core==0.2.23 langchain-community==0.2.9 databricks-agents
-# MAGIC
+# MAGIC %pip install python-dotenv
 # MAGIC # %pip install databricks-langchain langchain==0.2.11 langchain-core==0.2.23 langchain-community==0.2.9
 
 # COMMAND ----------
@@ -146,15 +147,12 @@ vector_search_as_retriever = CustomDatabricksVectorSearch(
         "content",
         "url",
     ],
-# ).as_retriever(search_kwargs={
-#     "k": 10,
-#     "query_type": "ann",
-# })
 ).as_retriever(
     search_type="similarity_score_threshold",
     search_kwargs={
         'score_threshold': 0.7,
-        'query_type': 'hybrid'
+        'query_type': 'hybrid',
+        'k': 20,
     }
 )
 
@@ -175,8 +173,8 @@ mlflow.models.set_retriever_schema(
 ############
 # Method to format the docs returned by the retriever into the prompt
 ############
-def format_context(docs):
-    chunk_template = "Passage: {chunk_text}\n"
+def format_context(docs: list[Document]) -> str:
+    chunk_template = "\nPassage: {chunk_text}\n"
     chunk_contents = [
         chunk_template.format(
             chunk_text=d.page_content,
@@ -298,11 +296,12 @@ classification_chain = (
 
 # COMMAND ----------
 
-def select_prompt(context: str) -> ChatPromptTemplate:
+from typing import Optional
+def select_prompt(context: Optional[str]) -> ChatPromptTemplate:
     """
     LLMを使って質問を分類し、それに応じてプロンプトを選択。
     """
-    if context.strip() == "No additional reference information is required for this question.":
+    if context is None:
         # Retrieverがスキップされた場合、一般質問用のプロンプトを使用
         return no_content_prompt
     return rag_prompt
@@ -318,20 +317,95 @@ def is_general_question(question: str) -> bool:
 
 # COMMAND ----------
 
+from concurrent.futures import ThreadPoolExecutor, as_completed
+
 from langchain_core.vectorstores.base import VectorStoreRetriever
+from mlflow.tracing.constant import SpanAttributeKey
+import json
+from mlflow.entities import SpanType
 
-def conditional_retriever(question: str, retriever: VectorStoreRetriever, format_context_fn) -> str:
+def set_retrieved_documents_for_mlflow(docs: list[Document]) -> None:
     """
-    質問が一般的な場合は検索をスキップし、それ以外の場合はRetrieverを実行する。
-    """
-    if is_general_question(question):
-        # 検索をスキップして空の参考情報を返す
-        return "No additional reference information is required for this question."
-    else:
-        # 通常通りRetrieverを実行
-        docs = retriever.invoke({"question": question})
-        return format_context_fn(docs)
+    documentをmlflowのtraceに載せる関数
 
+    # この関数を作るにあたった経緯
+
+    mlflowとMosaic AI Agent Evaluation (DatabricksのLLM-as-a-Judge) の仕様上、
+    Context Sufficient と Groundedness の評価に使われるdocsは、
+    mlflowでRETRIEVER属性が付いたspanの中でも最後にトレースされたものが対象となる。
+    
+    この関数を使わない場合、HyDEで取得したdocsのみが「回答に使用するために取得したdocs」と判定されてしまう。
+    そこで、新たにRETRIEVER属性を持つspanを作成し、すべてのdocsを含めることで、正しく評価対象として認識されるようにする。
+    """
+    with mlflow.tracing.fluent.start_span(
+        name="final_retrieved_docs",
+        span_type=SpanType.RETRIEVER
+    ) as retrieval_span:
+        retrieval_span.set_attribute(SpanAttributeKey.OUTPUTS, docs)
+
+def parallel_retrieval(queries: list[str], retriever) -> list[Document]:
+    """各クエリに対して retriever.invoke を並列実行して結果を集約する"""
+    all_docs = []
+    with ThreadPoolExecutor() as executor:
+        # クエリの並列処理は、mlflowのtraceが複数にまたがってしまうので非常によろしくないが、並列だと3s短縮されるのでこちらのメリットの方が大きいと判断
+        futures = {executor.submit(retriever.invoke, q): q for q in queries if q != ''}
+        for future in as_completed(futures):
+            docs = future.result()
+            all_docs.extend(docs)
+        
+    return all_docs
+
+
+# COMMAND ----------
+
+def merge_and_sort_docs(docs_dict: dict) -> dict:
+    """
+    docs_dict は
+      {
+          "retriever_docs": [...],
+          "hyde_docs": [...]
+      }
+    の形式で、両方の結果をマージして重複除去、スコアで降順ソートした docs を
+    辞書として { "docs": unique_docs } で返す
+    """
+    retriever_docs = docs_dict.get("retriever_docs", [])
+    hyde_docs = docs_dict.get("hyde_docs", [])
+    all_docs = retriever_docs + hyde_docs
+    # 重複除去（page_content をキーに）
+    unique_docs = list({doc.page_content: doc for doc in all_docs}.values())
+    return {"docs": unique_docs}
+
+# COMMAND ----------
+
+import cohere
+import os
+from dotenv import load_dotenv
+
+if "COHERE_API_KEY" not in os.environ:
+    load_dotenv()
+
+rerank_model = cohere.ClientV2(os.environ["COHERE_API_KEY"],)
+
+def rerank_docs(query: str, docs: list[Document], top_n: int = 5) -> list[Document]:
+
+    docs_content = [d.page_content for d in docs]
+
+    results = rerank_model.rerank(
+        query=query,
+        documents=docs_content,
+        top_n=top_n,
+        model="rerank-v3.5",
+    ).results
+
+    reranked_docs = []
+    for reranked_doc_idx_and_score in results:
+        reranked_doc_idx = reranked_doc_idx_and_score.index
+        docs[reranked_doc_idx].metadata["relevance_score"] = reranked_doc_idx_and_score.relevance_score
+        reranked_docs.append(docs[reranked_doc_idx])
+
+    set_retrieved_documents_for_mlflow(reranked_docs)
+
+    return reranked_docs
 
 # COMMAND ----------
 
@@ -360,29 +434,94 @@ rephrase_retriever = RePhraseQueryRetriever.from_llm(
 
 # COMMAND ----------
 
+rewrite_prompt_template = """
+
+あなたは、検索エンジンの精度を向上させるAIアシスタントです。
+ユーザーが入力したクエリをもとに、より効果的な検索を行うためのバリエーションを作成してください。
+質問には答えず、バリエーションを作ることに専念してください。
+
+質問: {original_query}
+
+- 言い換え（3つ）
+- シンプルな要約表現
+- より一般的な表現（1つ）
+- より専門的な表現（1つ）
+- 詳細化したバージョン（1つ）
+
+出力は必ず**カンマ(',')区切り**で記述してください。
+例: 要約, 言い換え1, 言い換え2, 言い換え3, 一般向け, 専門的, 詳細版
+"""
+rewrite_prompt = ChatPromptTemplate.from_template(rewrite_prompt_template)
+
+rewrite_chain = (
+    rewrite_prompt
+    | mini_model
+    | StrOutputParser()
+)
+
+
+# 質問のre-write
+def rewrite_question(question: str) -> list[str]:
+    response = rewrite_chain.invoke({"original_query": question})
+    try:
+        query = response.split(",")
+        return [question] + query
+    except:
+        return [question]
+
+# COMMAND ----------
+
+from langchain_core.runnables import RunnableParallel
+
+parallel_docs_chain = (
+    RunnableParallel({
+        "retriever_docs": RunnableLambda(
+            lambda inputs: parallel_retrieval(inputs["queries"], vector_search_as_retriever)
+        ),
+        "hyde_docs": RunnableLambda(
+            lambda inputs: rephrase_retriever.invoke({"question": inputs["question"]})
+        )
+    })
+    | RunnableLambda(merge_and_sort_docs)
+)
+
+def get_docs(inputs: dict) -> dict:
+    if is_general_question(inputs["question"]):
+        return {**inputs, "docs": None}
+    else:
+        parallel_result = parallel_docs_chain.invoke(inputs)
+        return {**inputs, **parallel_result}
+
 chain = (
     {
-        # userの質問
+        # ユーザーの質問抽出
         "question": itemgetter("messages") | RunnableLambda(extract_user_query_string),
-        # 参考情報
-        "context": itemgetter("messages")
-        | RunnableLambda(extract_user_query_string)
-        | RunnableLambda(
-            lambda question: conditional_retriever(
-                question, rephrase_retriever, format_context
-            )
-        ),
+        # HyDE用などの複数クエリ生成（例：リライト処理）
+        "queries": itemgetter("messages")
+                   | RunnableLambda(extract_user_query_string)
+                   | RunnableLambda(lambda question: rewrite_question(question))
     }
+    | RunnableLambda(get_docs)
     | RunnableLambda(
-        lambda inputs: select_prompt(
-            context=inputs["context"]
-        ).format(
-            question=inputs["question"], context=inputs["context"]
-        )
-    )
+         # 取得した docs が存在する場合、再ランキングを実施
+         lambda inputs: {**inputs, "docs": rerank_docs(inputs["question"], inputs["docs"])}
+         if inputs.get("docs") is not None else inputs
+       )
+    | RunnableLambda(
+         # 再ランキング後の docs を用いて、最終的な文脈 (context) を生成
+         lambda inputs: {**inputs, "context": format_context(inputs["docs"])}
+         if inputs.get("docs") is not None else {**inputs, "context": None}
+       )
+    | RunnableLambda(
+         # プロンプト選択。ここでは inputs に "question" と "context" があることを前提とする
+         lambda inputs: select_prompt(context=inputs["context"]).format(
+             question=inputs["question"], context=inputs["context"]
+         )
+       )
     | model
     | StrOutputParser()
 )
+
 
 mlflow.models.set_model(model=chain)
 

@@ -1,6 +1,8 @@
 # Databricks notebook source
-# MAGIC %pip install databricks-langchain=0.1.1
+# MAGIC %pip install databricks-langchain=0.1.1 
+# MAGIC %pip install cohere
 # MAGIC %pip install -U -qqqq databricks-agents mlflow mlflow-skinny databricks-vectorsearch langchain==0.2.11 langchain_core==0.2.23 langchain_community==0.2.10 openai
+# MAGIC %pip install python-dotenv
 
 # COMMAND ----------
 
@@ -210,12 +212,19 @@ registered_agent.invoke(input_example)
 import os
 import mlflow
 from databricks import agents
+import os 
+from dotenv import load_dotenv
+
+load_dotenv()
 
 # modelをdeployする
 deployment_info = agents.deploy(
     model_name,
     uc_model_info.version,
     scale_to_zero=True,
+    environment_vars={
+       'COHERE_API_KEY': os.environ['COHERE_API_KEY'],
+   }
 )
 
 browser_url = mlflow.utils.databricks_utils.get_browser_hostname()
