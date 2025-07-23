@@ -127,9 +127,9 @@ urls_ls.remove(student_works_url)
 
 # 韓国語、英語、中国語の紹介ページ
 lang_urls = [
-  'https://www.tech.ac.jp/visitor/language/ko/',
-  'https://www.tech.ac.jp/visitor/language/en/',
-  'https://www.tech.ac.jp/visitor/language/ch/'
+  'https://www.tech.ac.jp/visitor/language/ko/about/',
+  'https://www.tech.ac.jp/visitor/language/en/about/',
+  'https://www.tech.ac.jp/visitor/language/ch/about/'
 ]
 for url in lang_urls:
   urls_ls.remove(url)
