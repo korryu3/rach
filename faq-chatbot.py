@@ -338,6 +338,8 @@ def parse_and_split(docs: pd.Series) -> pd.Series:
 # COMMAND ----------
 
 def use_and_create_db(catalog, dbName, cloud_storage_path = None):
+  print(f"CREATE CATALOG IF NOT EXISTS {catalog};")
+  sql(f"CREATE CATALOG IF NOT EXISTS {catalog};")
   print(f"USE CATALOG `{catalog}`")
   spark.sql(f"USE CATALOG `{catalog}`")
   spark.sql(f"""create database if not exists `{dbName}` """)
