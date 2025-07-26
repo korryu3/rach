@@ -69,7 +69,7 @@ def get_soup(url):
     with httpx.Client() as client:
         # ReadTimeoutが起きることがあるので、情報取得のタイムアウトを10sにする
         timeout = Timeout(5.0, read=10.0)
-        html = client.get(url, timeout=timeout)
+        html = client.get(url, timeout=timeout, follow_redirects=True)
     if html.status_code != 200:
         print(f"Failed to get {url}")
         html.raise_for_status()
