@@ -140,7 +140,7 @@ except Exception as e:
 import os
 
 # Specify the full path to the chain notebook
-chain_notebook_path = os.path.join(os.getcwd(), "chain_langchain")
+chain_notebook_path = os.path.join(os.getcwd(), "chain_langchain.py")
 
 # Specify the full path to the config file (.yaml)
 config_file_path = os.path.join(os.getcwd(), "rag_chain_config.yaml")
