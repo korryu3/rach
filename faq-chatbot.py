@@ -7,8 +7,9 @@
 
 # COMMAND ----------
 
-# MAGIC %pip install databricks-langchain=0.1.1
-# MAGIC %pip install mlflow lxml==4.9.3 transformers==4.30.2 databricks-vectorsearch==0.22 databricks-sdk==0.28.0 databricks-feature-store==0.17.0 langchain==0.2.11 langchain_core==0.2.23 langchain-community==0.2.9 databricks-agents
+# MAGIC %pip install mlflow==2.19.0 lxml==4.9.3 transformers==4.30.2 \
+# MAGIC   databricks-vectorsearch==0.40 databricks-sdk==0.34.0 databricks-feature-store==0.17.0 databricks-agents==0.13.0 databricks-langchain=0.1.1 \
+# MAGIC   langchain==0.2.11 langchain_core==0.2.23 langchain-community==0.2.9 
 # MAGIC %pip install dspy-ai -U
 
 # COMMAND ----------
