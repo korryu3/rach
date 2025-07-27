@@ -1,5 +1,7 @@
 # Databricks notebook source
-# MAGIC %pip install -U -qqqq  databricks-agents mlflow mlflow-skinny databricks-vectorsearch langchain==0.2.11 langchain_core==0.2.23 langchain_community==0.2.10
+# MAGIC %pip install -U -qqqq mlflow==2.19.0 mlflow-skinny==2.19.0 \
+# MAGIC     databricks-vectorsearch==0.40 databricks-sdk==0.34.0 databricks-agents==0.13.0 \
+# MAGIC     langchain==0.2.11 langchain_core==0.2.23 langchain_community==0.2.10
 
 # COMMAND ----------
 
