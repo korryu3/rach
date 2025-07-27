@@ -1,5 +1,5 @@
 # Databricks notebook source
-# %pip install -qU  langchain==0.2.11 langchain_core==0.2.23 langchain-community==0.2.9 mlflow databricks-agents databricks-langchain=0.1.1
+# %pip install -qU  langchain==0.2.11 langchain_core==0.2.23 langchain-community==0.2.9 mlflow==2.19.0 databricks-agents==0.13.0 databricks-langchain==0.1.1
 
 # %restart_python
 
@@ -7,7 +7,6 @@
 
 import mlflow
 
-# from langchain_community.chat_models import ChatDatabricks
 from databricks_langchain import ChatDatabricks
 from langchain_core.output_parsers import StrOutputParser
 from langchain_core.prompts import (

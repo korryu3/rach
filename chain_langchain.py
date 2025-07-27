@@ -1,13 +1,8 @@
 # Databricks notebook source
-# MAGIC %pip install databricks-langchain=0.1.1
-# MAGIC %pip install cohere
-# MAGIC %pip install mlflow lxml==4.9.3 transformers==4.30.2 databricks-vectorsearch==0.38 databricks-sdk==0.28.0 databricks-feature-store==0.17.0 langchain==0.2.11 langchain_core==0.2.23 langchain-community==0.2.9 databricks-agents
-# MAGIC %pip install python-dotenv
-# MAGIC # %pip install databricks-langchain langchain==0.2.11 langchain-core==0.2.23 langchain-community==0.2.9
-
-# COMMAND ----------
-
-# MAGIC %pip install databricks-agents mlflow mlflow-skinny databricks-vectorsearch
+# MAGIC %pip install mlflow==2.19.0 mlflow-skinny==2.19.0 lxml==4.9.3 transformers==4.48.0 \
+# MAGIC     databricks-vectorsearch==0.40 databricks-sdk==0.34.0 databricks-feature-store==0.17.0 databricks-agents==0.13.0 databricks-langchain==0.1.1 \
+# MAGIC     langchain==0.2.11 langchain_core==0.2.23 langchain-community==0.2.9 \
+# MAGIC     cohere==5.13.0 python-dotenv==0.21.1
 
 # COMMAND ----------
 
@@ -532,6 +527,7 @@ input_example = {
 #   "messages": [{"role": "user", "content": "プログラマとは？"}]
 }
 
+# 回答のテストをしたいときは、以下のコメントを外してください
 # chain.invoke(input_example)
 
 # COMMAND ----------

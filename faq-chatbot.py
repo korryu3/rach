@@ -3,12 +3,13 @@
 
 # COMMAND ----------
 
-# MAGIC %pip install openai httpx beautifulsoup4
+# MAGIC %pip install openai==1.60.0 httpx==0.28.1 beautifulsoup4==4.13.4
 
 # COMMAND ----------
 
-# MAGIC %pip install databricks-langchain=0.1.1
-# MAGIC %pip install mlflow lxml==4.9.3 transformers==4.30.2 databricks-vectorsearch==0.22 databricks-sdk==0.28.0 databricks-feature-store==0.17.0 langchain==0.2.11 langchain_core==0.2.23 langchain-community==0.2.9 databricks-agents
+# MAGIC %pip install mlflow==2.19.0 lxml==4.9.3 transformers==4.30.2 \
+# MAGIC   databricks-vectorsearch==0.40 databricks-sdk==0.34.0 databricks-feature-store==0.17.0 databricks-agents==0.13.0 databricks-langchain==0.1.11 \
+# MAGIC   langchain==0.2.11 langchain_core==0.2.23 langchain-community==0.2.9 
 # MAGIC %pip install dspy-ai -U
 
 # COMMAND ----------
@@ -69,7 +70,7 @@ def get_soup(url):
     with httpx.Client() as client:
         # ReadTimeoutが起きることがあるので、情報取得のタイムアウトを10sにする
         timeout = Timeout(5.0, read=10.0)
-        html = client.get(url, timeout=timeout)
+        html = client.get(url, timeout=timeout, follow_redirects=True)
     if html.status_code != 200:
         print(f"Failed to get {url}")
         html.raise_for_status()
@@ -127,9 +128,9 @@ urls_ls.remove(student_works_url)
 
 # 韓国語、英語、中国語の紹介ページ
 lang_urls = [
-  'https://www.tech.ac.jp/visitor/language/ko/',
-  'https://www.tech.ac.jp/visitor/language/en/',
-  'https://www.tech.ac.jp/visitor/language/ch/'
+  'https://www.tech.ac.jp/visitor/language/ko/about/',
+  'https://www.tech.ac.jp/visitor/language/en/about/',
+  'https://www.tech.ac.jp/visitor/language/ch/about/'
 ]
 for url in lang_urls:
   urls_ls.remove(url)
@@ -338,6 +339,8 @@ def parse_and_split(docs: pd.Series) -> pd.Series:
 # COMMAND ----------
 
 def use_and_create_db(catalog, dbName, cloud_storage_path = None):
+  print(f"CREATE CATALOG IF NOT EXISTS {catalog};")
+  sql(f"CREATE CATALOG IF NOT EXISTS {catalog};")
   print(f"USE CATALOG `{catalog}`")
   spark.sql(f"USE CATALOG `{catalog}`")
   spark.sql(f"""create database if not exists `{dbName}` """)
