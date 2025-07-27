@@ -48,8 +48,13 @@ import re
 
 # COMMAND ----------
 
+from httpx import Timeout
+
 def get_soup(url):
-    html = httpx.get(url)
+    with httpx.Client() as client:
+        # ReadTimeoutが起きることがあるので、情報取得のタイムアウトを10sにする
+        timeout = Timeout(5.0, read=10.0)
+        html = client.get(url, timeout=timeout, follow_redirects=True)
     # 200か300番台はOK
     if html.status_code < 200 or html.status_code >= 400:
         raise Exception(f"Failed to get {url}, status code: {html.status_code}")
@@ -107,9 +112,9 @@ urls_ls.remove(student_works_url)
 
 # 韓国語、英語、中国語の紹介ページ
 lang_urls = [
-  'https://www.tech.ac.jp/visitor/language/ko/',
-  'https://www.tech.ac.jp/visitor/language/en/',
-  'https://www.tech.ac.jp/visitor/language/ch/'
+  'https://www.tech.ac.jp/visitor/language/ko/about/',
+  'https://www.tech.ac.jp/visitor/language/en/about/',
+  'https://www.tech.ac.jp/visitor/language/ch/about/'
 ]
 for url in lang_urls:
   urls_ls.remove(url)
@@ -369,6 +374,7 @@ CREATE TABLE IF NOT EXISTS {embed_table_name} (
 ) TBLPROPERTIES (delta.enableChangeDataFeed = true); 
 """)
 
+# ここでエラーが出たら、すべてのDBを削除し、再度全実行すると動きます
 spark.table(raw_data_table_name).write.mode('overwrite').saveAsTable(embed_table_name)
 
 display(spark.table(embed_table_name))
