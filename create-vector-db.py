@@ -1,9 +1,9 @@
 # Databricks notebook source
-# MAGIC %pip install mlflow==2.10.1 lxml==4.9.3 transformers==4.30.2 databricks-vectorsearch==0.22 databricks-sdk==0.28.0 databricks-feature-store==0.17.0 langchain==0.2.11 langchain_core==0.2.23
+# MAGIC %pip install mlflow==2.10.1 lxml==4.9.3 transformers==4.30.2 \
+# MAGIC     databricks-vectorsearch==0.40 databricks-sdk==0.34.0 databricks-feature-store==0.17.0 \
+# MAGIC     langchain==0.2.11 langchain_core==0.2.23
 # MAGIC %pip install dspy-ai -U
 # MAGIC %restart_python
-# MAGIC
-# MAGIC
 
 # COMMAND ----------
 
@@ -21,7 +21,7 @@ from mlflow import MlflowClient
 
 # COMMAND ----------
 
-# sql(f"CREATE CATALOG IF NOT EXISTS {catalog};")
+sql(f"CREATE CATALOG IF NOT EXISTS {catalog};")
 sql(f"USE CATALOG {catalog};")
 sql(f"CREATE SCHEMA IF NOT EXISTS {dbName};")
 sql(f"USE SCHEMA {dbName};")

@@ -1,8 +1,8 @@
 # Databricks notebook source
-# MAGIC %pip install databricks-langchain=0.1.1 
-# MAGIC %pip install cohere
-# MAGIC %pip install -U -qqqq databricks-agents mlflow mlflow-skinny databricks-vectorsearch langchain==0.2.11 langchain_core==0.2.23 langchain_community==0.2.10 openai
-# MAGIC %pip install python-dotenv
+# MAGIC %pip install -U -qqqq mlflow==2.19.0 mlflow-skinny==2.19.0 openai==1.60.0 \
+# MAGIC     databricks-vectorsearch==0.40 databricks-sdk==0.34.0 databricks-feature-store==0.17.0 databricks-agents==0.13.0 \
+# MAGIC     langchain==0.2.11 langchain_core==0.2.23 langchain_community==0.2.10 \
+# MAGIC     cohere==5.13.0 python-dotenv==0.21.1
 
 # COMMAND ----------
 
@@ -81,9 +81,6 @@ def wait_for_index_to_be_ready(vsc, vs_endpoint_name, index_name):
 # COMMAND ----------
 
 def create_index(vsc, vector_search_index_name):
-  # embeddingモデル名
-  # embedding_endpoint_name = "databricks-gte-large-en"
-  embedding_endpoint_name = "multilingual-e5-large-embedding"
   source_table_name = f"{catalog}.{db}.{embed_table_name}"
 
   #インデックスを新規作成
@@ -143,7 +140,7 @@ except Exception as e:
 import os
 
 # Specify the full path to the chain notebook
-chain_notebook_path = os.path.join(os.getcwd(), "chain_langchain")
+chain_notebook_path = os.path.join(os.getcwd(), "chain_langchain.py")
 
 # Specify the full path to the config file (.yaml)
 config_file_path = os.path.join(os.getcwd(), "rag_chain_config.yaml")
@@ -197,6 +194,10 @@ mlflow.set_registry_uri("databricks-uc")
 
 model_name = f"{catalog}.{dbName}.{registered_model_name}"
 uc_model_info = mlflow.register_model(model_uri=logged_chain_info.model_uri, name=model_name)
+
+# COMMAND ----------
+
+print(f"models:/{model_name}/{uc_model_info.version}")
 
 # COMMAND ----------
 

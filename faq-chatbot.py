@@ -3,7 +3,7 @@
 
 # COMMAND ----------
 
-# MAGIC %pip install openai httpx beautifulsoup4
+# MAGIC %pip install openai==1.60.0 httpx==0.28.1 beautifulsoup4==4.13.4
 
 # COMMAND ----------
 
